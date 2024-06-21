@@ -22,7 +22,7 @@ jobs:
         run: |
           python -m venv venv
           . venv/bin/activate
-          pip install -r requirements.txt
+          # pip install -r requirements.txt
 
       - name: Start SSH agent
         run: |
@@ -48,7 +48,7 @@ jobs:
             cd /root/repos/askgbt
             python3 -m venv venv
             source venv/bin/activate
-            pip install -r requirements.txt
+            # pip install -r requirements.txt
             # Останавливаем текущий процесс вашего приложения, если он запущен
             pkill -f main.py || true
             # Запускаем ваше приложение
