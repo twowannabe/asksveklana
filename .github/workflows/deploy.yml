@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.8'  # Убедитесь, что версия Python соответствует версии на сервере
+          python-version: '3.9'  # Убедитесь, что версия Python соответствует требованиям пакетов
 
       - name: Install dependencies
         run: |
