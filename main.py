@@ -9,7 +9,6 @@ import openai
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
-
 # Установка ключа API для OpenAI
 openai.api_key = OPENAI_API_KEY
 
@@ -22,12 +21,17 @@ logger = logging.getLogger(__name__)
 conversation_context = defaultdict(list)
 question_counters = defaultdict(Counter)
 
+# Начальная инструкция для ChatGPT
+initial_instructions = [
+    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
+]
+
 # Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
@@ -40,7 +44,7 @@ def ask_chatgpt(messages) -> str:
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я бот, который передает ваши сообщения в ChatGPT.')
+    update.message.reply_text('Привет! Я - Лиза, твоя виртуальная подруга. Давай пообщаемся!')
 
 def extract_text_from_message(message: Message) -> str:
     """Извлекает текст из сообщения, если текст доступен."""
@@ -82,7 +86,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             conversation_context[user_id].append({"role": "user", "content": user_message})
 
             # Отправляем всю историю сообщений в ChatGPT и получаем ответ
-            reply = ask_chatgpt(conversation_context[user_id])
+            messages = initial_instructions + conversation_context[user_id]
+            reply = ask_chatgpt(messages)
             logger.info(f"Отправка ответа: {reply}")
 
             # Сохраняем ответ бота в контексте беседы
@@ -111,7 +116,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         conversation_context[user_id].append({"role": "user", "content": user_message})
 
         # Отправляем всю историю сообщений в ChatGPT и получаем ответ
-        reply = ask_chatgpt(conversation_context[user_id])
+        messages = initial_instructions + conversation_context[user_id]
+        reply = ask_chatgpt(messages)
         logger.info(f"Отправка ответа: {reply}")
 
         # Сохраняем ответ бота в контексте беседы
