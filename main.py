@@ -135,9 +135,13 @@ def handle_voice_message(update: Update, context: CallbackContext) -> None:
     user_message = recognize_speech_from_voice(message.voice, file_path)
     logger.info(f"Распознанное голосовое сообщение: {user_message}")
 
-    # Проверяем, является ли это ответом на сообщение бота или упоминанием бота
-    if (message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username) or (message.caption and re.search(bot_username, message.caption)):
+    # Проверяем, является ли это ответом на сообщение пользователя или упоминанием бота
+    if (message.reply_to_message and message.reply_to_message.from_user.username != context.bot.username and re.search(bot_username, extract_text_from_message(message))):
         process_user_message(update, context, user_message, user_id)
+    elif (message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username) or (message.caption and re.search(bot_username, message.caption)):
+        process_user_message(update, context, user_message, user_id)
+    else:
+        logger.info("Не обнаружено условий для ответа бота")
 
     # Удаляем временный файл
     os.remove(file_path)
