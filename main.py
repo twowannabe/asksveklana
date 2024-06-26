@@ -16,7 +16,7 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levellevel)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,7 @@ def handle_voice_message(update: Update, context: CallbackContext) -> None:
     message = update.message
     user_id = message.from_user.id
     file_path = f"voice_{user_id}.wav"
+    bot_username = f"@{context.bot.username}"
 
     logger.info("Получено голосовое сообщение")
 
@@ -134,7 +135,9 @@ def handle_voice_message(update: Update, context: CallbackContext) -> None:
     user_message = recognize_speech_from_voice(message.voice, file_path)
     logger.info(f"Распознанное голосовое сообщение: {user_message}")
 
-    process_user_message(update, context, user_message, user_id)
+    # Проверяем, является ли это ответом на сообщение бота или упоминанием бота
+    if (message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username) or (message.caption and re.search(bot_username, message.caption)):
+        process_user_message(update, context, user_message, user_id)
 
     # Удаляем временный файл
     os.remove(file_path)
