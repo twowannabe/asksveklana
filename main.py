@@ -71,11 +71,13 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
     if message.entities:
         for entity in message.entities:
             if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+                logger.info(f"Бот упомянут в сообщении: {message.text}")
                 return True
 
     # 2. Если ответили на сообщение бота
     if message.reply_to_message:
         if message.reply_to_message.from_user.username == bot_username:
+            logger.info("Сообщение является ответом на сообщение бота")
             return True
 
     # 3. Если упомянули бота и ответили на чьё-то сообщение
@@ -83,6 +85,7 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
         if message.entities:
             for entity in message.entities:
                 if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+                    logger.info(f"Бот упомянут в ответе на сообщение: {message.text}")
                     return True
 
     # 4. Если ответили на голосовое сообщение и упомянули бота
@@ -90,6 +93,7 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
         if message.entities:
             for entity in message.entities:
                 if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+                    logger.info(f"Бот упомянут в ответе на голосовое сообщение: {message.text}")
                     return True
 
     return False
