@@ -98,14 +98,10 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
 
     return False
 
-def handle_voice(update: Update, context: CallbackContext) -> None:
-    if not update.message:
-        return
-
-    user_id = update.message.from_user.id
-    voice = update.message.voice.get_file()
+def process_voice_message(voice_message, user_id):
+    """Обрабатывает голосовое сообщение и возвращает его текст"""
     voice_file_path = f"voice_{user_id}.ogg"
-    voice.download(voice_file_path)
+    voice_message.download(voice_file_path)
 
     # Конвертируем OGG в WAV для распознавания
     audio = AudioSegment.from_file(voice_file_path, format="ogg")
@@ -118,26 +114,35 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
         try:
             user_message = recognizer.recognize_google(audio_data, language="ru-RU")
             logger.info(f"Расшифрованное сообщение: {user_message}")
-
-            # Проверяем, если ответили на чьё-то голосовое сообщение и упомянули бота
-            if update.message.reply_to_message:
-                if should_respond(update, context):
-                    update.message.text = user_message
-                    handle_message(update, context)
-                else:
-                    logger.info("Бот не должен отвечать на это сообщение.")
-            else:
-                update.message.reply_text(user_message)
-
+            return user_message
         except sr.UnknownValueError:
-            update.message.reply_text("Извините, я не смогла распознать ваше голосовое сообщение.")
+            logger.error("Извините, я не смогла распознать голосовое сообщение.")
+            return None
         except sr.RequestError as e:
             logger.error(f"Ошибка при обращении к сервису распознавания речи: {str(e)}")
-            update.message.reply_text("Произошла ошибка при распознавании голосового сообщения.")
+            return None
+        finally:
+            # Удаляем временные файлы
+            os.remove(voice_file_path)
+            os.remove(wav_file_path)
 
-    # Удаляем временные файлы
-    os.remove(voice_file_path)
-    os.remove(wav_file_path)
+def handle_voice(update: Update, context: CallbackContext) -> None:
+    if not update.message:
+        return
+
+    user_id = update.message.from_user.id
+    user_message = process_voice_message(update.message.voice, user_id)
+
+    if user_message:
+        # Проверяем, если ответили на чьё-то голосовое сообщение и упомянули бота
+        if update.message.reply_to_message:
+            if should_respond(update, context):
+                update.message.text = user_message
+                handle_message(update, context)
+            else:
+                logger.info("Бот не должен отвечать на это сообщение.")
+        else:
+            update.message.reply_text(user_message)
 
 # Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext) -> None:
