@@ -81,88 +81,22 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     message = update.message
     chat_type = message.chat.type
     user_id = message.from_user.id
-    logger.info(f"Получено сообщение: {message.text} в чате типа {chat_type}")
     bot_username = f"@{context.bot.username}"
+
+    logger.info(f"Получено сообщение: {message.text} в чате типа {chat_type}")
     user_message = extract_text_from_message(message)
 
     if chat_type in ['group', 'supergroup']:
         # Проверяем, есть ли упоминание бота или это ответ на сообщение бота
         if (user_message and re.search(bot_username, user_message)) or (message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username):
-            logger.info(f"Получено сообщение с упоминанием или ответом на сообщение бота: {user_message}")
-
-            # Проверяем, на какое сообщение отвечают
-            if message.reply_to_message:
-                original_message = extract_text_from_message(message.reply_to_message)
-                if original_message:
-                    conversation_context[user_id].append({"role": "user", "content": original_message})
-
-            # Обновляем счетчик повторений вопроса
-            question_counters[user_id][user_message] += 1
-
-            # Проверяем, не повторяет ли пользователь один и тот же вопрос более трех раз
-            if question_counters[user_id][user_message] > 3:
-                user_message += " (Давайте попробуем обсудить что-то новое!)"
-                question_counters[user_id][user_message] = 0  # Сбросить счетчик после изменения темы
-
-            # Сохраняем сообщение в контексте беседы
-            conversation_context[user_id].append({"role": "user", "content": user_message})
-
-            # Отправляем всю историю сообщений в ChatGPT и получаем ответ
-            messages = initial_instructions + conversation_context[user_id]
-            reply = ask_chatgpt(messages)
-            logger.info(f"Отправка ответа: {reply}")
-
-            # Сохраняем ответ бота в контексте беседы
-            conversation_context[user_id].append({"role": "assistant", "content": reply})
-
-            try:
-                update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
-            except Exception as e:
-                logger.error(f"Ошибка при отправке ответа: {str(e)}")
-                update.message.reply_text(reply)
+            process_user_message(update, context, user_message, user_id)
         else:
             logger.info("Упоминание бота или ответ на сообщение бота не обнаружено")
     else:
         # Обработка личных сообщений
-        logger.info(f"Получено личное сообщение: {user_message}")
+        process_user_message(update, context, user_message, user_id)
 
-        # Обновляем счетчик повторений вопроса
-        question_counters[user_id][user_message] += 1
-
-        # Проверяем, не повторяет ли пользователь один и тот же вопрос более трех раз
-        if question_counters[user_id][user_message] > 3:
-            user_message += " (Давайте попробуем обсудить что-то новое!)"
-            question_counters[user_id][user_message] = 0  # Сбросить счетчик после изменения темы
-
-        # Сохраняем сообщение в контексте беседы
-        conversation_context[user_id].append({"role": "user", "content": user_message})
-
-        # Отправляем всю историю сообщений в ChatGPT и получаем ответ
-        messages = initial_instructions + conversation_context[user_id]
-        reply = ask_chatgpt(messages)
-        logger.info(f"Отправка ответа: {reply}")
-
-        # Сохраняем ответ бота в контексте беседы
-        conversation_context[user_id].append({"role": "assistant", "content": reply})
-
-        try:
-            update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
-        except Exception as e:
-            logger.error(f"Ошибка при отправке ответа: {str(e)}")
-            update.message.reply_text(reply)
-
-# Обработчик голосовых сообщений
-def handle_voice_message(update: Update, context: CallbackContext) -> None:
-    message = update.message
-    user_id = message.from_user.id
-    file_path = f"voice_{user_id}.wav"
-
-    logger.info("Получено голосовое сообщение")
-
-    # Распознаем текст из голосового сообщения
-    user_message = recognize_speech_from_voice(message.voice, file_path)
-    logger.info(f"Распознанное голосовое сообщение: {user_message}")
-
+def process_user_message(update: Update, context: CallbackContext, user_message: str, user_id: int) -> None:
     # Обновляем счетчик повторений вопроса
     question_counters[user_id][user_message] += 1
 
@@ -187,6 +121,20 @@ def handle_voice_message(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logger.error(f"Ошибка при отправке ответа: {str(e)}")
         update.message.reply_text(reply)
+
+# Обработчик голосовых сообщений
+def handle_voice_message(update: Update, context: CallbackContext) -> None:
+    message = update.message
+    user_id = message.from_user.id
+    file_path = f"voice_{user_id}.wav"
+
+    logger.info("Получено голосовое сообщение")
+
+    # Распознаем текст из голосового сообщения
+    user_message = recognize_speech_from_voice(message.voice, file_path)
+    logger.info(f"Распознанное голосовое сообщение: {user_message}")
+
+    process_user_message(update, context, user_message, user_id)
 
     # Удаляем временный файл
     os.remove(file_path)
