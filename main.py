@@ -8,6 +8,8 @@ import openai
 import speech_recognition as sr
 from pydub import AudioSegment
 import os
+import sqlite3
+from datetime import datetime
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -45,6 +47,19 @@ def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
+
+# Функция для логирования запросов и ответов в базу данных
+def log_to_database(user_id, user_message, gpt_reply):
+    conn = sqlite3.connect('chatgpt_logs.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    INSERT INTO logs (user_id, user_message, gpt_reply)
+    VALUES (?, ?, ?)
+    ''', (user_id, user_message, gpt_reply))
+
+    conn.commit()
+    conn.close()
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
@@ -180,6 +195,9 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     # Добавляем ответ ChatGPT в контекст
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
+    # Логируем запрос и ответ в базу данных
+    log_to_database(user_id, user_message, reply)
+
     # Отправляем ответ пользователю
     update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
 
@@ -198,4 +216,21 @@ def main():
     updater.idle()
 
 if __name__ == '__main__':
+    # Создаем таблицу для логов, если она не существует
+    conn = sqlite3.connect('chatgpt_logs.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_message TEXT,
+        gpt_reply TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    conn.commit()
+    conn.close()
+
     main()
