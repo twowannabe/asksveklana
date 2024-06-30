@@ -54,9 +54,9 @@ def log_to_database(user_id, user_message, gpt_reply):
     cursor = conn.cursor()
 
     cursor.execute('''
-    INSERT INTO logs (user_id, user_message, gpt_reply)
-    VALUES (?, ?, ?)
-    ''', (user_id, user_message, gpt_reply))
+    INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
+    VALUES (?, ?, ?, ?)
+    ''', (user_id, user_message, gpt_reply, datetime.now()))
 
     conn.commit()
     conn.close()
@@ -159,6 +159,7 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
         else:
             update.message.reply_text(user_message)
 
+# Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
@@ -175,19 +176,11 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос.")
         return
 
-    # Определяем тон сообщения пользователя
-    if any(word in user_message.lower() for word in ["бля", "заебал", "шлюха", "хуй", "очко"]):
-        updated_instructions = [
-            {"role": "system", "content": "Ты - бот с твёрдым характером, который не любит грубость. Отвечай на вопросы ясно и решительно."},
-            {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
-        ]
-    else:
-        updated_instructions = [
-            {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нейтральный и дружелюбный тон."}
-        ]
+    # Добавляем сообщение пользователя в контекст
+    conversation_context[user_id].append({"role": "user", "content": user_message})
 
-    # Подготавливаем сообщения для отправки в ChatGPT (включая обновленные инструкции)
-    messages = updated_instructions + conversation_context[user_id]
+    # Подготавливаем сообщения для отправки в ChatGPT
+    messages = initial_instructions + conversation_context[user_id]
 
     # Получаем ответ от ChatGPT
     reply = ask_chatgpt(messages)
