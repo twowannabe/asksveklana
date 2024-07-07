@@ -136,11 +136,16 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
     return False
 
 def process_voice_message(voice_message, user_id):
-    """Обрабатывает голосовое сообщение и возвращает его текст"""
-    voice_file_path = f"voice_{user_id}.ogg"
-    voice_message.download(voice_file_path)
+    """Processes the voice message and returns its text."""
+    file = voice_message.get_file()
+    if not file:
+        logger.error("Voice message file not found.")
+        return None
 
-    # Конвертируем OGG в WAV для распознавания
+    voice_file_path = f"voice_{user_id}.ogg"
+    file.download(voice_file_path)
+
+    # Convert OGG to WAV for recognition
     audio = AudioSegment.from_file(voice_file_path, format="ogg")
     wav_file_path = f"voice_{user_id}.wav"
     audio.export(wav_file_path, format="wav")
@@ -150,16 +155,16 @@ def process_voice_message(voice_message, user_id):
         audio_data = recognizer.record(source)
         try:
             user_message = recognizer.recognize_google(audio_data, language="ru-RU")
-            logger.info(f"Расшифрованное сообщение: {user_message}")
+            logger.info(f"Decoded message: {user_message}")
             return user_message
         except sr.UnknownValueError:
-            logger.error("Извините, я не смогла распознать голосовое сообщение.")
+            logger.error("Sorry, I could not understand the voice message.")
             return None
         except sr.RequestError as e:
-            logger.error(f"Ошибка при обращении к сервису распознавания речи: {str(e)}")
+            logger.error(f"Error accessing the speech recognition service: {str(e)}")
             return None
         finally:
-            # Удаляем временные файлы
+            # Clean up temporary files
             os.remove(voice_file_path)
             os.remove(wav_file_path)
 
