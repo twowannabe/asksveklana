@@ -50,7 +50,7 @@ conn.commit()
 def get_sqlite_connection():
     conn = getattr(threading.current_thread(), "sqlite_connection", None)
     if conn is None:
-        conn = connect('chatgpt_logs.db')
+        conn = sqlite3.connect('chatgpt_logs.db')
         setattr(threading.current_thread(), "sqlite_connection", conn)
     return conn.cursor()
 
