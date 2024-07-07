@@ -29,35 +29,30 @@ question_counters = defaultdict(Counter)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
+    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями (иногда). Отвечай на вопросы, используя нежный и игривый тон, но не всегда."}
 ]
 
 # Создание базы данных для логирования
-def init_db():
-    conn = sqlite3.connect('chatgpt_logs.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
-        user_message TEXT,
-        gpt_reply TEXT,
-        timestamp TEXT
-    )
-    ''')
-    conn.commit()
-    conn.close()
+conn = sqlite3.connect('chatgpt_logs.db')
+cursor = conn.cursor()
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    user_message TEXT,
+    gpt_reply TEXT,
+    timestamp TEXT
+)
+''')
+conn.commit()
 
 def log_interaction(user_id, user_message, gpt_reply):
-    conn = sqlite3.connect('chatgpt_logs.db')
-    cursor = conn.cursor()
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     cursor.execute('''
     INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
     VALUES (?, ?, ?, ?)
     ''', (user_id, user_message, gpt_reply, timestamp))
     conn.commit()
-    conn.close()
 
 # Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
@@ -221,5 +216,14 @@ def main():
     updater = Updater(TELEGRAM_TOKEN)
     dispatcher = updater.dispatcher
 
-    # Инициализируем базу данных
-    init_db()
+    # Регистрируем обработчики
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
+
+    # Запуск бота
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
