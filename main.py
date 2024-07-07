@@ -2,7 +2,7 @@ import logging
 import re
 from collections import defaultdict, Counter
 from decouple import config
-from telegram import Update, ParseMode, Message, Audio
+from telegram import Update, ParseMode, Message
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import openai
 import speech_recognition as sr
@@ -32,12 +32,34 @@ initial_instructions = [
     {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
 ]
 
+# Создание базы данных для логирования
+conn = sqlite3.connect('chatgpt_logs.db')
+cursor = conn.cursor()
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    user_message TEXT,
+    gpt_reply TEXT,
+    timestamp TEXT
+)
+''')
+conn.commit()
+
+def log_interaction(user_id, user_message, gpt_reply):
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cursor.execute('''
+    INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
+    VALUES (?, ?, ?, ?)
+    ''', (user_id, user_message, gpt_reply, timestamp))
+    conn.commit()
+
 # Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
@@ -47,19 +69,6 @@ def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
-
-# Функция для логирования запросов и ответов в базу данных
-def log_to_database(user_id, user_message, gpt_reply):
-    conn = sqlite3.connect('chatgpt_logs.db')
-    cursor = conn.cursor()
-
-    cursor.execute('''
-    INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
-    VALUES (?, ?, ?, ?)
-    ''', (user_id, user_message, gpt_reply, datetime.now()))
-
-    conn.commit()
-    conn.close()
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
@@ -150,31 +159,39 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
 
     if user_message:
         # Проверяем, если ответили на чьё-то голосовое сообщение и упомянули бота
-        if update.message.reply_to_message:
-            if should_respond(update, context):
-                update.message.text = user_message
-                handle_message(update, context)
-            else:
-                logger.info("Бот не должен отвечать на это сообщение.")
+        if update.message.reply_to_message and should_respond(update, context):
+            update.message.text = user_message
+            handle_message(update, context, is_voice=True)
         else:
             update.message.reply_text(user_message)
 
 # Обработчик текстовых сообщений
-def handle_message(update: Update, context: CallbackContext) -> None:
+def handle_message(update: Update, context: CallbackContext, is_voice=False) -> None:
     if not update.message:
         return
 
-    if not should_respond(update, context):
+    if not should_respond(update, context) and not is_voice:
         return
 
     user_id = update.message.from_user.id
     user_message = extract_text_from_message(update.message)
+
+    if is_voice:
+        user_message = process_voice_message(update.message.reply_to_message.voice, user_id)
+        if not user_message:
+            return
 
     # Проверка на повторяющиеся вопросы
     question_counters[user_id][user_message] += 1
     if question_counters[user_id][user_message] > 3:
         update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос.")
         return
+
+    # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
+    if update.message.reply_to_message and not is_voice:
+        user_message = extract_text_from_message(update.message.reply_to_message)
+        if not user_message:
+            return
 
     # Добавляем сообщение пользователя в контекст
     conversation_context[user_id].append({"role": "user", "content": user_message})
@@ -188,11 +205,11 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     # Добавляем ответ ChatGPT в контекст
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Логируем запрос и ответ в базу данных
-    log_to_database(user_id, user_message, reply)
-
     # Отправляем ответ пользователю
     update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+
+    # Логирование взаимодействия
+    log_interaction(user_id, user_message, reply)
 
 def main():
     # Создаем апдейтера и диспетчера
@@ -209,21 +226,4 @@ def main():
     updater.idle()
 
 if __name__ == '__main__':
-    # Создаем таблицу для логов, если она не существует
-    conn = sqlite3.connect('chatgpt_logs.db')
-    cursor = conn.cursor()
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        user_message TEXT,
-        gpt_reply TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-
-    conn.commit()
-    conn.close()
-
     main()
