@@ -10,6 +10,7 @@ from pydub import AudioSegment
 import os
 import sqlite3
 from datetime import datetime
+import threading
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
