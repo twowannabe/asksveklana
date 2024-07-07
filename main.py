@@ -225,7 +225,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
 
 def main():
     # Create a SQLite connection for the main thread
-    conn = connect('chatgpt_logs.db')
+    conn = sqlite3.connect('chatgpt_logs.db')  # Use sqlite3.connect() to create a connection
     cursor = conn.cursor()
 
     # Function to stop and close SQLite connection
