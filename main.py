@@ -46,13 +46,25 @@ CREATE TABLE IF NOT EXISTS logs (
 ''')
 conn.commit()
 
+def get_sqlite_connection():
+    conn = getattr(threading.current_thread(), "sqlite_connection", None)
+    if conn is None:
+        conn = connect('chatgpt_logs.db')
+        setattr(threading.current_thread(), "sqlite_connection", conn)
+    return conn.cursor()
+
+# Updated log_interaction function to use thread-local cursor
 def log_interaction(user_id, user_message, gpt_reply):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    cursor.execute('''
-    INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
-    VALUES (?, ?, ?, ?)
-    ''', (user_id, user_message, gpt_reply, timestamp))
-    conn.commit()
+    cursor = get_sqlite_connection()
+    try:
+        cursor.execute('''
+        INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
+        VALUES (?, ?, ?, ?)
+        ''', (user_id, user_message, gpt_reply, timestamp))
+        cursor.connection.commit()
+    except Error as e:
+        print(f"Error logging interaction: {e}")
 
 # Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
@@ -212,6 +224,21 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
     log_interaction(user_id, user_message, reply)
 
 def main():
+    # Create a SQLite connection for the main thread
+    conn = connect('chatgpt_logs.db')
+    cursor = conn.cursor()
+
+    # Function to stop and close SQLite connection
+    def stop_and_close_sqlite_connection():
+        try:
+            conn.close()
+        except Error as e:
+            print(f"Error closing SQLite connection: {e}")
+
+    # Ensure the SQLite connection is closed properly on program exit
+    import atexit
+    atexit.register(stop_and_close_sqlite_connection)
+
     # Создаем апдейтера и диспетчера
     updater = Updater(TELEGRAM_TOKEN)
     dispatcher = updater.dispatcher
