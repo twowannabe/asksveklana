@@ -84,7 +84,7 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про слона, просто шутка."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про слона."}
     ]
     return ask_chatgpt(joke_prompt)
 
@@ -253,9 +253,6 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     if not update.message:
         return
 
-    if not should_respond(update, context) and not is_voice and not is_video:
-        return
-
     user_id = update.message.from_user.id
     user_message = extract_text_from_message(update.message)
 
@@ -273,6 +270,9 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     if "шутка" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
+        return
+
+    if not should_respond(update, context):
         return
 
     # Проверка на повторяющиеся вопросы
