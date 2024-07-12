@@ -18,10 +18,15 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 # Установка ключа API для OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Логирование
+# Логирование с указанием кодировки
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+                    level=logging.INFO,
+                    handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
+for handler in logger.handlers:
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setLevel(logging.INFO)
+    handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
 # Глобальная переменная для хранения контекста бесед и счетчиков повторений
 conversation_context = defaultdict(list)
@@ -195,6 +200,8 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
     # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
     if update.message.reply_to_message and not is_voice:
         original_message = extract_text_from_message(update.message.reply_to_message)
+        if not original_message and update.message.reply_to_message.voice:
+            original_message = process_voice_message(update.message.reply_to_message.voice, user_id)
         if not original_message:
             return
         user_message = f"{original_message} {user_message}"
