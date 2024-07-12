@@ -20,12 +20,12 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование с указанием кодировки
-logging.basicConfig(format='%(asctime)s - %(name)s - %(level)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(level)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -84,7 +84,7 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и его любовника Максима."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про слона."}
     ]
     return ask_chatgpt(joke_prompt)
 
@@ -269,7 +269,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "шутка"
-    if "гей" in user_message.lower():
+    if "шутка" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
