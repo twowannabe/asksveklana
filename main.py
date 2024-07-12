@@ -84,13 +84,13 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя по имени Максим, но не делай на этом акцент."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя."}
     ]
     return ask_chatgpt(joke_prompt)
 
 def add_smilies(answer: str) -> str:
     """Добавляет смайлы в конец ответа"""
-    smilies = ['))))', ')0)0)0)))']
+    smilies = ['))))', ')0)0)0)))', '))', ')', '))))))))))))))']
     return answer + ' ' + smilies[len(answer) % 2]
 
 # Обработчик команды /start
@@ -270,9 +270,6 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     if "пенис" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
-        return
-
-    if not should_respond(update, context):
         return
 
     # Проверка на повторяющиеся вопросы
