@@ -25,7 +25,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -177,14 +177,17 @@ def process_voice_message(voice_message, user_id):
 
 def process_video_message(video_message, user_id):
     """Обрабатывает видео сообщение и возвращает текст из него"""
+    logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
     video_file_path = f"video_{user_id}.mp4"
     file = video_message.get_file()
     file.download(video_file_path)
+    logger.info(f"Видео файл скачан: {video_file_path}")
 
     # Извлекаем аудио из видео
     audio_file_path = f"audio_{user_id}.wav"
     video = mp.VideoFileClip(video_file_path)
     video.audio.write_audiofile(audio_file_path)
+    logger.info(f"Аудио извлечено из видео и сохранено как: {audio_file_path}")
 
     recognizer = sr.Recognizer()
     with sr.AudioFile(audio_file_path) as source:
@@ -224,9 +227,11 @@ def handle_video(update: Update, context: CallbackContext) -> None:
         return
 
     user_id = update.message.from_user.id
+    logger.info(f"Обработка видео сообщения от пользователя {user_id}")
     user_message = process_video_message(update.message.video, user_id)
 
     if user_message:
+        logger.info(f"Расшифрованное видео сообщение: {user_message}")
         # Проверяем, если ответили на чьё-то видео сообщение и упомянули бота
         if update.message.reply_to_message and should_respond(update, context):
             update.message.text = user_message
@@ -310,5 +315,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
- 
