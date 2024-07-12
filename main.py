@@ -268,8 +268,8 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Проверка на наличие слова "шутка"
-    if "гей" in user_message.lower():
+    # Проверка на наличие слова "пенис"
+    if "пенис" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
