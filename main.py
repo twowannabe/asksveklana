@@ -20,7 +20,7 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование с указанием кодировки
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levellevel)s - %(message)s',
                     level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
@@ -211,33 +211,35 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
 
-    user_id = update.message.from_user.id
-    user_message = process_voice_message(update.message.voice, user_id)
+    if should_respond(update, context):
+        user_id = update.message.from_user.id
+        user_message = process_voice_message(update.message.voice, user_id)
 
-    if user_message:
-        # Проверяем, если ответили на чьё-то голосовое сообщение и упомянули бота
-        if update.message.reply_to_message and should_respond(update, context):
-            update.message.text = user_message
-            handle_message(update, context, is_voice=True)
-        else:
-            update.message.reply_text(user_message)
+        if user_message:
+            # Проверяем, если ответили на чьё-то голосовое сообщение и упомянули бота
+            if update.message.reply_to_message:
+                update.message.text = user_message
+                handle_message(update, context, is_voice=True)
+            else:
+                update.message.reply_text(user_message)
 
 def handle_video(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
 
-    user_id = update.message.from_user.id
-    logger.info(f"Обработка видео сообщения от пользователя {user_id}")
-    user_message = process_video_message(update.message.video, user_id)
+    if should_respond(update, context):
+        user_id = update.message.from_user.id
+        logger.info(f"Обработка видео сообщения от пользователя {user_id}")
+        user_message = process_video_message(update.message.video, user_id)
 
-    if user_message:
-        logger.info(f"Расшифрованное видео сообщение: {user_message}")
-        # Проверяем, если ответили на чьё-то видео сообщение и упомянули бота
-        if update.message.reply_to_message and should_respond(update, context):
-            update.message.text = user_message
-            handle_message(update, context, is_video=True)
-        else:
-            update.message.reply_text(user_message)
+        if user_message:
+            logger.info(f"Расшифрованное видео сообщение: {user_message}")
+            # Проверяем, если ответили на чьё-то видео сообщение и упомянули бота
+            if update.message.reply_to_message:
+                update.message.text = user_message
+                handle_message(update, context, is_video=True)
+            else:
+                update.message.reply_text(user_message)
 
 # Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
