@@ -7,6 +7,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 import openai
 import speech_recognition as sr
 from pydub import AudioSegment
+import moviepy.editor as mp
 import os
 import sqlite3
 from datetime import datetime
@@ -130,6 +131,14 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
                     logger.info(f"Бот упомянут в ответе на голосовое сообщение: {message.text}")
                     return True
 
+    # 5. Если ответили на видео сообщение и упомянули бота
+    if message.reply_to_message and message.reply_to_message.video:
+        if message.entities:
+            for entity in message.entities:
+                if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+                    logger.info(f"Бот упомянут в ответе на видео сообщение: {message.text}")
+                    return True
+
     return False
 
 def process_voice_message(voice_message, user_id):
@@ -161,6 +170,35 @@ def process_voice_message(voice_message, user_id):
             os.remove(voice_file_path)
             os.remove(wav_file_path)
 
+def process_video_message(video_message, user_id):
+    """Обрабатывает видео сообщение и возвращает текст из него"""
+    video_file_path = f"video_{user_id}.mp4"
+    file = video_message.get_file()
+    file.download(video_file_path)
+
+    # Извлекаем аудио из видео
+    audio_file_path = f"audio_{user_id}.wav"
+    video = mp.VideoFileClip(video_file_path)
+    video.audio.write_audiofile(audio_file_path)
+
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(audio_file_path) as source:
+        audio_data = recognizer.record(source)
+        try:
+            user_message = recognizer.recognize_google(audio_data, language="ru-RU")
+            logger.info(f"Расшифрованное сообщение из видео: {user_message}")
+            return user_message
+        except sr.UnknownValueError:
+            logger.error("Извините, я не смогла распознать аудио из видео.")
+            return None
+        except sr.RequestError as e:
+            logger.error(f"Ошибка при обращении к сервису распознавания речи: {str(e)}")
+            return None
+        finally:
+            # Удаляем временные файлы
+            os.remove(video_file_path)
+            os.remove(audio_file_path)
+
 def handle_voice(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
@@ -176,12 +214,27 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
         else:
             update.message.reply_text(user_message)
 
-# Обработчик текстовых сообщений
-def handle_message(update: Update, context: CallbackContext, is_voice=False) -> None:
+def handle_video(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
 
-    if not should_respond(update, context) and not is_voice:
+    user_id = update.message.from_user.id
+    user_message = process_video_message(update.message.video, user_id)
+
+    if user_message:
+        # Проверяем, если ответили на чьё-то видео сообщение и упомянули бота
+        if update.message.reply_to_message and should_respond(update, context):
+            update.message.text = user_message
+            handle_message(update, context, is_video=True)
+        else:
+            update.message.reply_text(user_message)
+
+# Обработчик текстовых сообщений
+def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
+    if not update.message:
+        return
+
+    if not should_respond(update, context) and not is_voice and not is_video:
         return
 
     user_id = update.message.from_user.id
@@ -192,6 +245,11 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
         if not user_message:
             return
 
+    if is_video:
+        user_message = process_video_message(update.message.reply_to_message.video, user_id)
+        if not user_message:
+            return
+
     # Проверка на повторяющиеся вопросы
     question_counters[user_id][user_message] += 1
     if question_counters[user_id][user_message] > 3:
@@ -199,10 +257,12 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
         return
 
     # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
-    if update.message.reply_to_message and not is_voice:
+    if update.message.reply_to_message and not is_voice and not is_video:
         original_message = extract_text_from_message(update.message.reply_to_message)
         if not original_message and update.message.reply_to_message.voice:
             original_message = process_voice_message(update.message.reply_to_message.voice, user_id)
+        if not original_message and update.message.reply_to_message.video:
+            original_message = process_video_message(update.message.reply_to_message.video, user_id)
         if not original_message:
             return
         user_message = f"{original_message} {user_message}"
@@ -237,6 +297,7 @@ def main():
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
+    dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
 
     # Запуск бота
     updater.start_polling()
