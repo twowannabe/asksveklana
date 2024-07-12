@@ -25,7 +25,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -35,7 +35,7 @@ question_counters = defaultdict(Counter)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {"role": "system", "content": "Ты - миллениал, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая '))))' и ')0)0)0)))' как смайлы в конце сообщений. Отвечай на вопросы, используя этот стиль."}
+    {"role": "system", "content": "Ты - миллениал, который переписывается на русском языке. Ты дружелюбный и игривый, использующий '))))' и ')0)0)0)))' как смайлы в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
 # Создание базы данных для логирования
@@ -80,6 +80,13 @@ def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
+
+def generate_joke() -> str:
+    """Генерирует анекдот про слона."""
+    joke_prompt = [
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя, просто шутка."}
+    ]
+    return ask_chatgpt(joke_prompt)
 
 def add_smilies(answer: str) -> str:
     """Добавляет смайлы в конец ответа"""
@@ -261,6 +268,12 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         user_message = process_video_message(update.message.reply_to_message.video, user_id)
         if not user_message:
             return
+
+    # Проверка на наличие слова "шутка"
+    if "пенис" in user_message.lower():
+        joke = generate_joke()
+        update.message.reply_text(joke)
+        return
 
     # Проверка на повторяющиеся вопросы
     question_counters[user_id][user_message] += 1
