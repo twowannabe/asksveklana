@@ -25,7 +25,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -84,7 +84,7 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя, просто шутка."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про слона, просто шутка."}
     ]
     return ask_chatgpt(joke_prompt)
 
@@ -270,7 +270,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "шутка"
-    if "пенис" in user_message.lower():
+    if "шутка" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
