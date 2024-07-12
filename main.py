@@ -20,12 +20,12 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование с указанием кодировки
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levellevel)s - %(message)s',
                     level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -84,13 +84,13 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и его любовника Максима."}
     ]
     return ask_chatgpt(joke_prompt)
 
 def add_smilies(answer: str) -> str:
     """Добавляет смайлы в конец ответа"""
-    smilies = ['))))', ')0)0)0)))', '))', ')', '))))))))))))))']
+    smilies = ['))))', ')0)0)0)))']
     return answer + ' ' + smilies[len(answer) % 2]
 
 # Обработчик команды /start
@@ -158,11 +158,13 @@ def process_voice_message(voice_message, user_id):
     voice_file_path = f"voice_{user_id}.ogg"
     file = voice_message.get_file()
     file.download(voice_file_path)
+    logger.info(f"Скачан голосовой файл: {voice_file_path}")
 
     # Конвертируем OGG в WAV для распознавания
     audio = AudioSegment.from_file(voice_file_path, format="ogg")
     wav_file_path = f"voice_{user_id}.wav"
     audio.export(wav_file_path, format="wav")
+    logger.info(f"Конвертирован в WAV: {wav_file_path}")
 
     recognizer = sr.Recognizer()
     with sr.AudioFile(wav_file_path) as source:
@@ -267,7 +269,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "шутка"
-    if "пенис" in user_message.lower():
+    if "гей" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
@@ -276,6 +278,9 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     question_counters[user_id][user_message] += 1
     if question_counters[user_id][user_message] > 3:
         update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос. ))))")
+        return
+
+    if not is_voice and not is_video and not should_respond(update, context):
         return
 
     # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
