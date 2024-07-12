@@ -18,38 +18,25 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Test SSH connection
-        run: |
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'echo SSH connection successful'
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-
-      - name: Install dependencies
-        run: |
-          python -m venv venv
-          . venv/bin/activate
-          # pip install -r requirements.txt
-
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Copy files to server
+      - name: Test SSH connection
+        run: ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'echo SSH connection successful'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+
+      - name: Copy files to server
         run: |
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "mkdir -p /root/repos/askgbt"
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" . $SERVER_USER@$SERVER_HOST:/root/repos/askgbt
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /root/repos/askgbt"
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" . ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/repos/askgbt
 
       - name: Restart application on server
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             cd /root/repos/askgbt
             python3 -m venv venv
             source venv/bin/activate
@@ -57,3 +44,6 @@ jobs:
             pkill -f main.py || true
             nohup python3 main.py &
           EOF
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
