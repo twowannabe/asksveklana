@@ -135,7 +135,8 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
 def process_voice_message(voice_message, user_id):
     """Обрабатывает голосовое сообщение и возвращает его текст"""
     voice_file_path = f"voice_{user_id}.ogg"
-    voice_message.download(voice_file_path)
+    file = voice_message.get_file()
+    file.download(voice_file_path)
 
     # Конвертируем OGG в WAV для распознавания
     audio = AudioSegment.from_file(voice_file_path, format="ogg")
