@@ -10,7 +10,6 @@ from pydub import AudioSegment
 import os
 import sqlite3
 from datetime import datetime
-import threading
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -20,7 +19,7 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levellevel)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -30,42 +29,35 @@ question_counters = defaultdict(Counter)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями (иногда). Отвечай на вопросы, используя нежный и игривый тон, но не всегда."}
+    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
 ]
 
 # Создание базы данных для логирования
-conn = sqlite3.connect('chatgpt_logs.db')
-cursor = conn.cursor()
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS logs (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    user_message TEXT,
-    gpt_reply TEXT,
-    timestamp TEXT
-)
-''')
-conn.commit()
+def init_db():
+    conn = sqlite3.connect('chatgpt_logs.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        user_message TEXT,
+        gpt_reply TEXT,
+        timestamp TEXT
+    )
+    ''')
+    conn.commit()
+    conn.close()
 
-def get_sqlite_connection():
-    conn = getattr(threading.current_thread(), "sqlite_connection", None)
-    if conn is None:
-        conn = sqlite3.connect('chatgpt_logs.db')
-        setattr(threading.current_thread(), "sqlite_connection", conn)
-    return conn.cursor()
-
-# Updated log_interaction function to use thread-local cursor
 def log_interaction(user_id, user_message, gpt_reply):
+    conn = sqlite3.connect('chatgpt_logs.db')
+    cursor = conn.cursor()
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    cursor = get_sqlite_connection()
-    try:
-        cursor.execute('''
-        INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
-        VALUES (?, ?, ?, ?)
-        ''', (user_id, user_message, gpt_reply, timestamp))
-        cursor.connection.commit()
-    except Error as e:
-        print(f"Error logging interaction: {e}")
+    cursor.execute('''
+    INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
+    VALUES (?, ?, ?, ?)
+    ''', (user_id, user_message, gpt_reply, timestamp))
+    conn.commit()
+    conn.close()
 
 # Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
@@ -136,16 +128,11 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
     return False
 
 def process_voice_message(voice_message, user_id):
-    """Processes the voice message and returns its text."""
-    file = voice_message.get_file()
-    if not file:
-        logger.error("Voice message file not found.")
-        return None
-
+    """Обрабатывает голосовое сообщение и возвращает его текст"""
     voice_file_path = f"voice_{user_id}.ogg"
-    file.download(voice_file_path)
+    voice_message.download(voice_file_path)
 
-    # Convert OGG to WAV for recognition
+    # Конвертируем OGG в WAV для распознавания
     audio = AudioSegment.from_file(voice_file_path, format="ogg")
     wav_file_path = f"voice_{user_id}.wav"
     audio.export(wav_file_path, format="wav")
@@ -155,16 +142,16 @@ def process_voice_message(voice_message, user_id):
         audio_data = recognizer.record(source)
         try:
             user_message = recognizer.recognize_google(audio_data, language="ru-RU")
-            logger.info(f"Decoded message: {user_message}")
+            logger.info(f"Расшифрованное сообщение: {user_message}")
             return user_message
         except sr.UnknownValueError:
-            logger.error("Sorry, I could not understand the voice message.")
+            logger.error("Извините, я не смогла распознать голосовое сообщение.")
             return None
         except sr.RequestError as e:
-            logger.error(f"Error accessing the speech recognition service: {str(e)}")
+            logger.error(f"Ошибка при обращении к сервису распознавания речи: {str(e)}")
             return None
         finally:
-            # Clean up temporary files
+            # Удаляем временные файлы
             os.remove(voice_file_path)
             os.remove(wav_file_path)
 
@@ -207,9 +194,10 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
 
     # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
     if update.message.reply_to_message and not is_voice:
-        user_message = extract_text_from_message(update.message.reply_to_message)
-        if not user_message:
+        original_message = extract_text_from_message(update.message.reply_to_message)
+        if not original_message:
             return
+        user_message = f"{original_message} {user_message}"
 
     # Добавляем сообщение пользователя в контекст
     conversation_context[user_id].append({"role": "user", "content": user_message})
@@ -230,24 +218,12 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False) -> 
     log_interaction(user_id, user_message, reply)
 
 def main():
-    # Create a SQLite connection for the main thread
-    conn = sqlite3.connect('chatgpt_logs.db')  # Use sqlite3.connect() to create a connection
-    cursor = conn.cursor()
-
-    # Function to stop and close SQLite connection
-    def stop_and_close_sqlite_connection():
-        try:
-            conn.close()
-        except Error as e:
-            print(f"Error closing SQLite connection: {e}")
-
-    # Ensure the SQLite connection is closed properly on program exit
-    import atexit
-    atexit.register(stop_and_close_sqlite_connection)
-
     # Создаем апдейтера и диспетчера
     updater = Updater(TELEGRAM_TOKEN)
     dispatcher = updater.dispatcher
+
+    # Инициализируем базу данных
+    init_db()
 
     # Регистрируем обработчики
     dispatcher.add_handler(CommandHandler("start", start))
