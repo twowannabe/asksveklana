@@ -35,7 +35,7 @@ question_counters = defaultdict(Counter)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {"role": "system", "content": "Ты - дружелюбная женщина-бот, которая любит заигрывать с пользователями. Отвечай на вопросы, используя нежный и игривый тон."}
+    {"role": "system", "content": "Ты - миллениал, который переписывается на русском языке. Ты дружелюбный и игривый, использующий '))))' и ')0)0)0)))' как смайлы в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
 # Создание базы данных для логирования
@@ -75,15 +75,20 @@ def ask_chatgpt(messages) -> str:
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
-        return answer
+        return add_smilies(answer)
     except Exception as e:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
 
+def add_smilies(answer: str) -> str:
+    """Добавляет смайлы в конец ответа"""
+    smilies = ['))))', ')0)0)0)))']
+    return answer + ' ' + smilies[len(answer) % 2]
+
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся!')
+    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! ))))')
 
 def extract_text_from_message(message: Message) -> str:
     """Извлекает текст из сообщения, если текст доступен."""
@@ -253,7 +258,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     # Проверка на повторяющиеся вопросы
     question_counters[user_id][user_message] += 1
     if question_counters[user_id][user_message] > 3:
-        update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос.")
+        update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос. ))))")
         return
 
     # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
