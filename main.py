@@ -20,7 +20,7 @@ OPENAI_API_KEY = config('OPENAI_API_KEY')
 openai.api_key = OPENAI_API_KEY
 
 # Логирование с указанием кодировки
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levellevel)s - %(message)s',
                     level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
@@ -189,12 +189,16 @@ def process_video_message(video_message, user_id):
     logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
     video_file_path = f"video_{user_id}.mp4"
     file = video_message.get_file()
+
     try:
         file.download(video_file_path)
+        logger.info(f"Видео файл скачан: {video_file_path}")
     except telegram.error.BadRequest as e:
-        logger.error(f"Ошибка загрузки видео файла: {e}")
-        return None
-    logger.info(f"Видео файл скачан: {video_file_path}")
+        if "File is too big" in str(e):
+            logger.error(f"Ошибка загрузки видео файла: {e}")
+            return "Видео файл слишком большой для обработки."
+        else:
+            raise
 
     # Извлекаем аудио из видео
     audio_file_path = f"audio_{user_id}.wav"

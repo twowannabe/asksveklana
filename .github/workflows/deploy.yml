@@ -3,7 +3,7 @@ name: Deploy to Server
 on:
   push:
     branches:
-      - main  # Замените на нужную ветку
+      - main
 
 jobs:
   deploy:
@@ -16,7 +16,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9'  # Убедитесь, что версия Python соответствует требованиям пакетов
+          python-version: '3.9'
+
+      - name: Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'echo SSH connection successful'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
 
       - name: Install dependencies
         run: |
@@ -25,11 +32,9 @@ jobs:
           # pip install -r requirements.txt
 
       - name: Start SSH agent
-        run: |
-          eval "$(ssh-agent -s)"
-          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Copy files to server
         env:
@@ -49,8 +54,6 @@ jobs:
             python3 -m venv venv
             source venv/bin/activate
             # pip install -r requirements.txt
-            # Останавливаем текущий процесс вашего приложения, если он запущен
             pkill -f main.py || true
-            # Запускаем ваше приложение
             nohup python3 main.py &
           EOF
