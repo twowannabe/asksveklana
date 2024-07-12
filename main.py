@@ -189,7 +189,11 @@ def process_video_message(video_message, user_id):
     logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
     video_file_path = f"video_{user_id}.mp4"
     file = video_message.get_file()
-    file.download(video_file_path)
+    try:
+        file.download(video_file_path)
+    except telegram.error.BadRequest as e:
+        logger.error(f"Ошибка загрузки видео файла: {e}")
+        return None
     logger.info(f"Видео файл скачан: {video_file_path}")
 
     # Извлекаем аудио из видео
