@@ -31,7 +31,6 @@ for handler in logger.handlers:
 
 # Глобальная переменная для хранения контекста бесед и счетчиков повторений
 conversation_context = defaultdict(list)
-question_counters = defaultdict(Counter)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
@@ -268,16 +267,10 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Проверка на наличие слова "шутка"
+    # Проверка на наличие слова "пенис"
     if "пенис" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
-        return
-
-    # Проверка на повторяющиеся вопросы
-    question_counters[user_id][user_message] += 1
-    if question_counters[user_id][user_message] > 3:
-        update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос. ))))")
         return
 
     if not is_voice and not is_video and not should_respond(update, context):
