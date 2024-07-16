@@ -283,7 +283,11 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         return
 
     # Проверка на повторяющиеся вопросы
-    question_counters[user_id][user_message] += 1
+    if user_message in question_counters[user_id]:
+        question_counters[user_id][user_message] += 1
+    else:
+        question_counters[user_id][user_message] = 1
+
     if question_counters[user_id][user_message] > 3:
         update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос. ))))")
         return
