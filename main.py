@@ -24,7 +24,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
-
 for handler in logger.handlers:
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
@@ -190,16 +189,8 @@ def process_video_message(video_message, user_id):
     logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
     video_file_path = f"video_{user_id}.mp4"
     file = video_message.get_file()
-
-    try:
-        file.download(video_file_path)
-        logger.info(f"Видео файл скачан: {video_file_path}")
-    except telegram.error.BadRequest as e:
-        if "File is too big" in str(e):
-            logger.error(f"Ошибка загрузки видео файла: {e}")
-            return "Видео файл слишком большой для обработки."
-        else:
-            raise
+    file.download(video_file_path)
+    logger.info(f"Видео файл скачан: {video_file_path}")
 
     # Извлекаем аудио из видео
     audio_file_path = f"audio_{user_id}.wav"
@@ -277,18 +268,14 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Проверка на наличие слова "пенис"
+    # Проверка на наличие слова "шутка"
     if "пенис" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
 
     # Проверка на повторяющиеся вопросы
-    if user_message in question_counters[user_id]:
-        question_counters[user_id][user_message] += 1
-    else:
-        question_counters[user_id][user_message] = 1
-
+    question_counters[user_id][user_message] += 1
     if question_counters[user_id][user_message] > 3:
         update.message.reply_text("Вы уже спрашивали об этом несколько раз. Пожалуйста, задайте другой вопрос. ))))")
         return
