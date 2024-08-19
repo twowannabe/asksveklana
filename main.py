@@ -111,13 +111,13 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и его любовника Максима."}
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и лезбиянку Нину."}
     ]
     return ask_chatgpt(joke_prompt)
 
 def add_smilies(answer: str) -> str:
     """Добавляет смайлы в конец ответа"""
-    smilies = ['))))', ')0)0)0)))']
+    smilies = [')', '))']
     return answer + ' ' + smilies[len(answer) % 2]
 
 # Функция для генерации изображений
@@ -314,7 +314,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "пенис"
-    if "пенис" in user_message.lower():
+    if "геи" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
