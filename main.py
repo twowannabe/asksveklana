@@ -2,7 +2,7 @@ import logging
 import re
 from collections import defaultdict, Counter
 from decouple import config
-from telegram import Update, ParseMode, Message
+from telegram import Update, ParseMode, Message, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import openai
 import speech_recognition as sr
@@ -11,6 +11,8 @@ import moviepy.editor as mp
 import os
 import sqlite3
 from datetime import datetime
+import requests
+from io import BytesIO
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -52,6 +54,23 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+def is_drawing_request(message: str) -> bool:
+    """Определяет, является ли сообщение запросом на рисование."""
+    drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение"]
+    message = message.lower()
+    return any(keyword in message for keyword in drawing_keywords)
+
+def send_image(update: Update, context: CallbackContext, image_url: str) -> None:
+    try:
+        response = requests.get(image_url)
+        image = BytesIO(response.content)
+        image.name = 'image.png'  # Даем имя файлу, чтобы Telegram его распознал
+        update.message.reply_photo(photo=InputFile(image))
+    except Exception as e:
+        error_msg = f"Ошибка при отправке изображения: {str(e)}"
+        logger.error(error_msg)
+        update.message.reply_text(error_msg)
 
 def log_interaction(user_id, user_message, gpt_reply):
     conn = sqlite3.connect('chatgpt_logs.db')
@@ -291,26 +310,12 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         update.message.reply_text(joke)
         return
 
-    # Обработка команды "нарисуй"
-    if "нарисуй" in user_message.lower():
-        prompt = user_message.lower().split("нарисуй", 1)[1].strip()
-        if prompt:
-            image_url = generate_image(prompt)
-            update.message.reply_text(f"Вот ваше изображение: {image_url}")
-        else:
-            update.message.reply_text("Пожалуйста, добавьте описание того, что вы хотите нарисовать.")
-        return
-
-    # Обработка команды "покажи"
-    if "покажи" in user_message.lower():
-        prompt = user_message.lower().split("покажи", 1)[1].strip()
-        if prompt:
-            # Здесь можно использовать аналогичную функцию для генерации изображений
-            # или для поиска и отображения уже созданного изображения
-            image_url = generate_image(prompt)
-            update.message.reply_text(f"Вот что я нашел: {image_url}")
-        else:
-            update.message.reply_text("Пожалуйста, добавьте описание того, что вы хотите увидеть.")
+    # Если сообщение содержит запрос на рисование
+    if is_drawing_request(user_message):
+        # Здесь можно извлечь текст после ключевого слова для создания изображения
+        prompt = user_message
+        image_url = generate_image(prompt)
+        send_image(update, context, image_url)
         return
 
     if not is_voice and not is_video and not should_respond(update, context):
