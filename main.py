@@ -139,8 +139,8 @@ def ask_chatgpt(messages) -> str:
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
 
-        # Удаляем скобочки и числа перед добавлением эмодзи
-        clean_answer = ''.join(filter(lambda x: x not in '0123456789()', answer))
+        # Удаляем только скобочки перед добавлением эмодзи
+        clean_answer = answer.replace(')', '').replace('(', '')
 
         return add_emojis_at_end(clean_answer)
     except Exception as e:
