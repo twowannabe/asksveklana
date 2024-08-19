@@ -148,6 +148,7 @@ def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
 
+
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
