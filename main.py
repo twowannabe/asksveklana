@@ -119,12 +119,16 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
-        return add_random_emojis(answer)  # Используем функцию случайного добавления эмодзи
+
+        # Удаляем все скобочки перед добавлением эмодзи
+        answer = answer.replace(')', '').replace('(', '')
+
+        return add_random_emojis(answer)
     except Exception as e:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
