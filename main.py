@@ -64,10 +64,11 @@ def clean_drawing_prompt(prompt: str) -> str:
     return prompt
 
 def is_drawing_request(message: str) -> bool:
-    """Определяет, является ли сообщение запросом на рисование."""
-    drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение"]
+    """Определяет, является ли сообщение запросом на рисование или показ изображения."""
+    drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение", "покажи как выглядит", "покажи как они выглядели"]
     message = message.lower()
     return any(keyword in message for keyword in drawing_keywords)
+
 
 def send_image(update: Update, context: CallbackContext, image_url: str) -> None:
     try:
