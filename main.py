@@ -69,7 +69,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
@@ -91,6 +91,24 @@ def add_smilies(answer: str) -> str:
     """Добавляет смайлы в конец ответа"""
     smilies = ['))))', ')0)0)0)))']
     return answer + ' ' + smilies[len(answer) % 2]
+
+# Функция для генерации изображений
+def generate_image(prompt: str) -> str:
+    """Генерирует изображение по заданному текстовому описанию."""
+    logger.info(f"Отправка запроса на создание изображения с описанием: {prompt}")
+    try:
+        response = openai.Image.create(
+            prompt=prompt,
+            n=1,
+            size="1024x1024"
+        )
+        image_url = response['data'][0]['url']
+        logger.info(f"Получена ссылка на изображение: {image_url}")
+        return image_url
+    except Exception as e:
+        error_msg = f"Ошибка при создании изображения: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
@@ -271,6 +289,28 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     if "пенис" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
+        return
+
+    # Обработка команды "нарисуй"
+    if "нарисуй" in user_message.lower():
+        prompt = user_message.lower().split("нарисуй", 1)[1].strip()
+        if prompt:
+            image_url = generate_image(prompt)
+            update.message.reply_text(f"Вот ваше изображение: {image_url}")
+        else:
+            update.message.reply_text("Пожалуйста, добавьте описание того, что вы хотите нарисовать.")
+        return
+
+    # Обработка команды "покажи"
+    if "покажи" in user_message.lower():
+        prompt = user_message.lower().split("покажи", 1)[1].strip()
+        if prompt:
+            # Здесь можно использовать аналогичную функцию для генерации изображений
+            # или для поиска и отображения уже созданного изображения
+            image_url = generate_image(prompt)
+            update.message.reply_text(f"Вот что я нашел: {image_url}")
+        else:
+            update.message.reply_text("Пожалуйста, добавьте описание того, что вы хотите увидеть.")
         return
 
     if not is_voice and not is_video and not should_respond(update, context):
