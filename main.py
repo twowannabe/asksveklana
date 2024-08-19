@@ -55,6 +55,14 @@ def init_db():
     conn.commit()
     conn.close()
 
+def clean_drawing_prompt(prompt: str) -> str:
+    """Удаляет ключевые слова, такие как 'нарисуй', из текста запроса."""
+    drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение"]
+    for keyword in drawing_keywords:
+        if keyword in prompt.lower():
+            prompt = prompt.lower().replace(keyword, "").strip()
+    return prompt
+
 def is_drawing_request(message: str) -> bool:
     """Определяет, является ли сообщение запросом на рисование."""
     drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение"]
