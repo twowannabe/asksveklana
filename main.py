@@ -48,7 +48,7 @@ def analyze_image_with_openai(image_path: str) -> str:
             prompt="Опиши, что изображено на изображении",
             n=1,
             image=image_data,  # Передача данных изображения как байтового объекта
-            model="gpt-4o"  # Используйте модель, поддерживающую анализ изображений
+            model="gpt-4"  # Используйте модель, поддерживающую анализ изображений
         )
         description = response['choices'][0]['text'].strip()
         return description
