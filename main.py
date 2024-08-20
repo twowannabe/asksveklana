@@ -14,6 +14,8 @@ from datetime import datetime
 import requests
 from io import BytesIO
 import random
+import pytesseract
+from PIL import Image
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -40,17 +42,47 @@ initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
-def analyze_image_with_openai(image_path: str) -> str:
-    """Анализирует изображение с помощью OpenAI и возвращает описание."""
-    with open(image_path, "rb") as image_file:
-        response = openai.Image.create(
-            prompt="Опиши, что изображено на изображении",
-            n=1,
-            image=image_file,
-            model="gpt-4"  # Используйте модель, поддерживающую анализ изображений
+def analyze_image_with_pytesseract(image_path: str) -> str:
+    """Анализирует изображение с помощью pytesseract и возвращает распознанный текст."""
+    try:
+        image = Image.open(image_path)
+        text = pytesseract.image_to_string(image, lang='eng')
+        return text
+    except Exception as e:
+        return f"Ошибка при распознавании текста: {str(e)}"
+
+def generate_description_from_text(text: str) -> str:
+    """Генерирует описание на основе текста с использованием OpenAI."""
+    try:
+        response = openai.Completion.create(
+            engine="text-davinci-003",  # Используйте соответствующую модель OpenAI
+            prompt=f"На изображении обнаружен следующий текст: {text}. Опиши, что это может быть.",
+            max_tokens=150
         )
-        description = response['choices'][0]['text'].strip()
+        return response.choices[0].text.strip()
+    except Exception as e:
+        return f"Ошибка при генерации описания: {str(e)}"
+
+def analyze_image_with_openai(image_path: str) -> str:
+    """Анализирует изображение, извлекая текст с помощью pytesseract и генерирует описание с помощью OpenAI."""
+    try:
+        # Открываем изображение и извлекаем текст
+        image = Image.open(image_path)
+        extracted_text = pytesseract.image_to_string(image, lang='eng').strip()
+
+        if not extracted_text:
+            return "На изображении не удалось распознать текст."
+
+        # Используем OpenAI для создания описания на основе извлеченного текста
+        response = openai.Completion.create(
+            engine="text-davinci-003",  # Укажите соответствующую модель OpenAI
+            prompt=f"Текст, найденный на изображении: '{extracted_text}'. Опиши, что это может быть.",
+            max_tokens=150
+        )
+        description = response.choices[0].text.strip()
         return description
+    except Exception as e:
+        return f"Ошибка при анализе изображения: {str(e)}"
 
 
 def handle_photo(update: Update, context: CallbackContext) -> None:
@@ -402,7 +434,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         image_path = f"temp_image.jpg"
         photo_file.download(image_path)
 
-        # Анализируем изображение с использованием OpenAI
+        # Анализируем изображение с использованием OpenAI и pytesseract
         description = analyze_image_with_openai(image_path)
 
         # Отправляем результат пользователю
