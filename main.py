@@ -1,8 +1,8 @@
 import logging
 import re
-from collections import defaultdict, Counter
+from collections import defaultdict
 from decouple import config
-from telegram import Update, ParseMode, Message, InputFile
+from telegram import Update, ParseMode, Message
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import openai
 import speech_recognition as sr
@@ -14,9 +14,6 @@ from datetime import datetime
 import requests
 from io import BytesIO
 import random
-import pytesseract
-from PIL import Image
-from imageai.Detection import ObjectDetection
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -35,94 +32,13 @@ for handler in logger.handlers:
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
-# Глобальная переменная для хранения контекста бесед и счетчиков повторений
+# Глобальная переменная для хранения контекста бесед
 conversation_context = defaultdict(list)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
-
-def analyze_image_with_imageai(image_path: str) -> str:
-    """Анализирует изображение и возвращает список распознанных объектов."""
-    detector = ObjectDetection()
-    detector.setModelTypeAsRetinaNet()
-    detector.setModelPath("resnet50_coco_best_v2.0.1.h5")  # Укажите путь к модели
-    detector.loadModel()
-
-    detections = detector.detectObjectsFromImage(input_image=image_path, output_image_path="output.jpg")
-
-    if not detections:
-        return "На изображении не удалось распознать объекты."
-
-    objects = [d['name'] for d in detections]
-    objects_description = ', '.join(objects)
-
-    # Генерация ответа с использованием OpenAI
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=f"На изображении распознаны следующие объекты: {objects_description}. Опиши, что это может быть.",
-        max_tokens=150
-    )
-    return response.choices[0].text.strip()
-
-def analyze_image_with_pytesseract(image_path: str) -> str:
-    """Анализирует изображение с помощью pytesseract и возвращает распознанный текст."""
-    try:
-        image = Image.open(image_path)
-        text = pytesseract.image_to_string(image, lang='eng')
-        return text
-    except Exception as e:
-        return f"Ошибка при распознавании текста: {str(e)}"
-
-def generate_description_from_text(text: str) -> str:
-    """Генерирует описание на основе текста с использованием OpenAI."""
-    try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # Используйте соответствующую модель OpenAI
-            prompt=f"На изображении обнаружен следующий текст: {text}. Опиши, что это может быть.",
-            max_tokens=150
-        )
-        return response.choices[0].text.strip()
-    except Exception as e:
-        return f"Ошибка при генерации описания: {str(e)}"
-
-def analyze_image_with_openai(image_path: str) -> str:
-    """Анализирует изображение, извлекая текст с помощью pytesseract и генерирует описание с помощью OpenAI."""
-    try:
-        # Открываем изображение и извлекаем текст
-        image = Image.open(image_path)
-        extracted_text = pytesseract.image_to_string(image, lang='eng').strip()
-
-        if not extracted_text:
-            return "На изображении не удалось распознать текст."
-
-        # Используем OpenAI для создания описания на основе извлеченного текста
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # Укажите соответствующую модель OpenAI
-            prompt=f"Текст, найденный на изображении: '{extracted_text}'. Опиши, что это может быть.",
-            max_tokens=150
-        )
-        description = response.choices[0].text.strip()
-        return description
-    except Exception as e:
-        return f"Ошибка при анализе изображения: {str(e)}"
-
-
-def handle_photo(update: Update, context: CallbackContext) -> None:
-    """Обрабатывает полученное фото и отправляет анализ изображения."""
-    photo_file = update.message.photo[-1].get_file()
-    image_path = f"temp_image.jpg"
-    photo_file.download(image_path)
-
-    # Анализируем изображение
-    description = analyze_image_with_openai(image_path)
-
-    # Отправляем результат пользователю
-    update.message.reply_text(description)
-
-    # Удаляем временный файл
-    os.remove(image_path)
 
 def add_emojis_at_end(answer: str) -> str:
     """Добавляет несколько эмодзи в конец ответа."""
@@ -137,27 +53,6 @@ def add_emojis_at_end(answer: str) -> str:
     chosen_emojis = ''.join(random.choices(emojis, k=num_emojis))
 
     return f"{answer} {chosen_emojis}"
-
-def add_random_emojis(answer: str) -> str:
-    """Случайным образом добавляет эмодзи в текст."""
-    emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
-
-    # Определяем, нужно ли добавлять эмодзи в это сообщение
-    if random.choice([True, False]):
-        return answer
-
-    # Определяем, сколько эмодзи добавить
-    num_emojis = random.randint(1, 3)
-
-    # Определяем места для вставки эмодзи
-    positions = sorted(random.sample(range(len(answer) + 1), num_emojis))
-
-    # Вставляем эмодзи в случайные места
-    for pos in positions:
-        emoji = random.choice(emojis)
-        answer = answer[:pos] + emoji + answer[pos:]
-
-    return answer
 
 # Создание базы данных для логирования
 def init_db():
@@ -189,13 +84,12 @@ def is_drawing_request(message: str) -> bool:
     message = message.lower()
     return any(keyword in message for keyword in drawing_keywords)
 
-
 def send_image(update: Update, context: CallbackContext, image_url: str) -> None:
     try:
         response = requests.get(image_url)
         image = BytesIO(response.content)
         image.name = 'image.png'  # Даем имя файлу, чтобы Telegram его распознал
-        update.message.reply_photo(photo=InputFile(image))
+        update.message.reply_photo(photo=image)
     except Exception as e:
         error_msg = f"Ошибка при отправке изображения: {str(e)}"
         logger.error(error_msg)
@@ -217,7 +111,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
@@ -232,18 +126,12 @@ def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
 
-
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
         {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и лезбиянку Нину."}
     ]
     return ask_chatgpt(joke_prompt)
-
-def add_smilies(answer: str) -> str:
-    """Добавляет смайлы в конец ответа"""
-    smilies = [')', '))']
-    return answer + ' ' + smilies[len(answer) % 2]
 
 # Функция для генерации изображений
 def generate_image(prompt: str) -> str:
@@ -265,7 +153,7 @@ def generate_image(prompt: str) -> str:
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! ))))')
+    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 def extract_text_from_message(message: Message) -> str:
     """Извлекает текст из сообщения, если текст доступен."""
@@ -439,7 +327,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "геи" для генерации шутки
-    if "геи" in user_message.lower():
+    if "геи" в user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
@@ -450,22 +338,6 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         prompt = user_message
         image_url = generate_image(prompt)
         send_image(update, context, image_url)
-        return
-
-    # Если сообщение является ответом на сообщение с фото
-    if update.message.reply_to_message and update.message.reply_to_message.photo:
-        photo_file = update.message.reply_to_message.photo[-1].get_file()
-        image_path = f"temp_image.jpg"
-        photo_file.download(image_path)
-
-        # Анализируем изображение с использованием ImageAI и OpenAI
-        description = analyze_image_with_imageai(image_path)
-
-        # Отправляем результат пользователю
-        update.message.reply_text(description)
-
-        # Удаляем временный файл
-        os.remove(image_path)
         return
 
     if not is_voice and not is_video and not should_respond(update, context):
@@ -513,7 +385,6 @@ def main():
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
     dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
-    dispatcher.add_handler(MessageHandler(Filters.photo, handle_photo))  # Обработчик фотографий
 
     # Запуск бота
     updater.start_polling()
