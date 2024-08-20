@@ -43,15 +43,15 @@ initial_instructions = [
 def analyze_image_with_openai(image_path: str) -> str:
     """Анализирует изображение с помощью OpenAI и возвращает описание."""
     with open(image_path, "rb") as image_file:
-        image_data = image_file.read()
         response = openai.Image.create(
             prompt="Опиши, что изображено на изображении",
             n=1,
-            image=image_data,  # Передача данных изображения как байтового объекта
+            image=image_file,
             model="gpt-4"  # Используйте модель, поддерживающую анализ изображений
         )
         description = response['choices'][0]['text'].strip()
         return description
+
 
 def handle_photo(update: Update, context: CallbackContext) -> None:
     """Обрабатывает полученное фото и отправляет анализ изображения."""
