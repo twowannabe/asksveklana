@@ -42,6 +42,29 @@ initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
+def analyze_image_with_imageai(image_path: str) -> str:
+    """Анализирует изображение и возвращает список распознанных объектов."""
+    detector = ObjectDetection()
+    detector.setModelTypeAsRetinaNet()
+    detector.setModelPath("resnet50_coco_best_v2.0.1.h5")  # Укажите путь к модели
+    detector.loadModel()
+
+    detections = detector.detectObjectsFromImage(input_image=image_path, output_image_path="output.jpg")
+
+    if not detections:
+        return "На изображении не удалось распознать объекты."
+
+    objects = [d['name'] for d in detections]
+    objects_description = ', '.join(objects)
+
+    # Генерация ответа с использованием OpenAI
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=f"На изображении распознаны следующие объекты: {objects_description}. Опиши, что это может быть.",
+        max_tokens=150
+    )
+    return response.choices[0].text.strip()
+
 def analyze_image_with_pytesseract(image_path: str) -> str:
     """Анализирует изображение с помощью pytesseract и возвращает распознанный текст."""
     try:
@@ -434,8 +457,8 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         image_path = f"temp_image.jpg"
         photo_file.download(image_path)
 
-        # Анализируем изображение с использованием OpenAI и pytesseract
-        description = analyze_image_with_openai(image_path)
+        # Анализируем изображение с использованием ImageAI и OpenAI
+        description = analyze_image_with_imageai(image_path)
 
         # Отправляем результат пользователю
         update.message.reply_text(description)
