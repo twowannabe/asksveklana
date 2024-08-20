@@ -327,7 +327,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
 
     # Проверка на наличие слова "геи" для генерации шутки
-    if "геи" в user_message.lower():
+    if "геи" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
         return
