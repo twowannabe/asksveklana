@@ -37,12 +37,7 @@ jobs:
       - name: Restart application on server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            cd /root/repos/askgbt
-            python3 -m venv venv
-            source venv/bin/activate
-            # pip install -r requirements.txt
-            pkill -f main.py || true
-            nohup python3 main.py &
+            sudo systemctl restart askgbt
           EOF
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
