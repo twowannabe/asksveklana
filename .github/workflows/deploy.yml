@@ -37,7 +37,7 @@ jobs:
       - name: Restart application on server
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            sudo systemctl restart askgbt
+             systemctl stop askgbt; systemctl start askgbt
           EOF
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
