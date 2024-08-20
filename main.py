@@ -47,7 +47,7 @@ def analyze_image_with_openai(image_path: str) -> str:
             prompt="Опиши, что изображено на изображении",
             n=1,
             image=image_file,
-            model="gpt-4"  # Используйте модель, поддерживающую анализ изображений
+            model="gpt-4o"  # Используйте модель, поддерживающую анализ изображений
         )
         description = response['choices'][0]['text'].strip()
         return description
@@ -381,7 +381,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Проверка на наличие слова "пенис"
+    # Проверка на наличие слова "геи" для генерации шутки
     if "геи" in user_message.lower():
         joke = generate_joke()
         update.message.reply_text(joke)
@@ -393,6 +393,22 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         prompt = user_message
         image_url = generate_image(prompt)
         send_image(update, context, image_url)
+        return
+
+    # Если сообщение является ответом на сообщение с фото
+    if update.message.reply_to_message and update.message.reply_to_message.photo:
+        photo_file = update.message.reply_to_message.photo[-1].get_file()
+        image_path = f"temp_image.jpg"
+        photo_file.download(image_path)
+
+        # Анализируем изображение с использованием OpenAI
+        description = analyze_image_with_openai(image_path)
+
+        # Отправляем результат пользователю
+        update.message.reply_text(description)
+
+        # Удаляем временный файл
+        os.remove(image_path)
         return
 
     if not is_voice and not is_video and not should_respond(update, context):
