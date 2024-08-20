@@ -16,6 +16,7 @@ from io import BytesIO
 import random
 import pytesseract
 from PIL import Image
+from imageai.Detection import ObjectDetection
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
