@@ -40,6 +40,33 @@ initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
+def analyze_image_with_openai(image_path: str) -> str:
+    """Анализирует изображение с помощью OpenAI и возвращает описание."""
+    with open(image_path, "rb") as image_file:
+        response = openai.Image.create(
+            prompt="Опиши, что изображено на изображении",
+            n=1,
+            image=image_file,
+            model="gpt-4"  # Используйте модель, поддерживающую анализ изображений
+        )
+        description = response['choices'][0]['text'].strip()
+        return description
+
+def handle_photo(update: Update, context: CallbackContext) -> None:
+    """Обрабатывает полученное фото и отправляет анализ изображения."""
+    photo_file = update.message.photo[-1].get_file()
+    image_path = f"temp_image.jpg"
+    photo_file.download(image_path)
+
+    # Анализируем изображение
+    description = analyze_image_with_openai(image_path)
+
+    # Отправляем результат пользователю
+    update.message.reply_text(description)
+
+    # Удаляем временный файл
+    os.remove(image_path)
+
 def add_emojis_at_end(answer: str) -> str:
     """Добавляет несколько эмодзи в конец ответа."""
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
@@ -413,6 +440,7 @@ def main():
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
     dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
+    dispatcher.add_handler(MessageHandler(Filters.photo, handle_photo))  # Обработчик фотографий
 
     # Запуск бота
     updater.start_polling()
