@@ -513,7 +513,7 @@ def main():
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
     dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
-    dispatcher.add_handler(MessageHandler(Filters.photo, handle_photo))  # Обработчик фотографий
+    # dispatcher.add_handler(MessageHandler(Filters.photo, handle_photo))  # Обработчик фотографий
 
     # Запуск бота
     updater.start_polling()
