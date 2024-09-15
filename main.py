@@ -15,6 +15,7 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import moviepy.editor as mp
 import requests
+from telegram.utils.helpers import escape_markdown
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
