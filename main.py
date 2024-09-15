@@ -359,9 +359,6 @@ def handle_video(update: Update, context: CallbackContext) -> None:
 
 # Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
-    # Логируем отправляемое сообщение
-    logger.info(f"Отправляемое сообщение: {reply}")
-
     if not update.message:
         return
 
@@ -418,13 +415,13 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     # Добавляем ответ ChatGPT в контекст
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Логируем отправляемое сообщение
-    logger.info(f"Отправляемое сообщение: {reply}")
-
     # Отправляем ответ пользователю с обработкой исключений
     try:
+        # Логируем отправляемое сообщение внутри try-блока
+        logger.info(f"Отправляемое сообщение: {reply}")
+
         update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
-    except telegram.error.BadRequest as e:
+    except Exception as e:
         logger.error(f"Ошибка при отправке сообщения: {e}")
         update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
