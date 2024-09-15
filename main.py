@@ -10,7 +10,7 @@ from io import BytesIO
 from decouple import config
 from telegram import Update, Message
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from telegram.constants import ParseMode
+from telegram import ParseMode
 from telegram.helpers import escape
 import openai
 import speech_recognition as sr
