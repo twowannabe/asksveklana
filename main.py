@@ -9,7 +9,7 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import moviepy.editor as mp
 import os
-import sqlite3
+import psycopg2  # Используем psycopg2 для подключения к PostgreSQL
 from datetime import datetime
 import requests
 from io import BytesIO
@@ -18,6 +18,13 @@ import random
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
+
+# Новые переменные для подключения к базе данных из файла .env
+DB_NAME = config('DB_NAME')
+DB_USER = config('DB_USER')
+DB_PASSWORD = config('DB_PASSWORD')
+DB_HOST = config('DB_HOST')
+DB_PORT = config('DB_PORT', default='5432')
 
 # Установка ключа API для OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -54,17 +61,39 @@ def add_emojis_at_end(answer: str) -> str:
 
     return f"{answer} {chosen_emojis}"
 
-# Создание базы данных для логирования
+# Функция для подключения к базе данных PostgreSQL
+def get_db_connection():
+    return psycopg2.connect(
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT
+    )
+
+# Создание базы данных для логирования (если необходимо)
 def init_db():
-    conn = sqlite3.connect('chatgpt_logs.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
         user_message TEXT,
         gpt_reply TEXT,
-        timestamp TEXT
+        timestamp TIMESTAMP WITHOUT TIME ZONE
+    )
+    ''')
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        chat_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        text TEXT,
+        date TIMESTAMP WITHOUT TIME ZONE,
+        user_first_name VARCHAR(255),
+        user_last_name VARCHAR(255),
+        user_username VARCHAR(255)
     )
     ''')
     conn.commit()
@@ -96,12 +125,12 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         update.message.reply_text(error_msg)
 
 def log_interaction(user_id, user_message, gpt_reply):
-    conn = sqlite3.connect('chatgpt_logs.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.now()
     cursor.execute('''
     INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
-    VALUES (?, ?, ?, ?)
+    VALUES (%s, %s, %s, %s)
     ''', (user_id, user_message, gpt_reply, timestamp))
     conn.commit()
     conn.close()
@@ -111,7 +140,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
@@ -125,13 +154,6 @@ def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
-
-def generate_joke() -> str:
-    """Генерирует анекдот про слона."""
-    joke_prompt = [
-        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и лезбиянку Нину."}
-    ]
-    return ask_chatgpt(joke_prompt)
 
 # Функция для генерации изображений
 def generate_image(prompt: str) -> str:
@@ -153,7 +175,7 @@ def generate_image(prompt: str) -> str:
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! 😊')
+    update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 def extract_text_from_message(message: Message) -> str:
     """Извлекает текст из сообщения, если текст доступен."""
@@ -242,26 +264,6 @@ def process_voice_message(voice_message, user_id):
             os.remove(voice_file_path)
             os.remove(wav_file_path)
 
-def describe_user(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    user_first_name = update.message.from_user.first_name
-
-    # Получаем сообщения пользователя из базы данных
-    user_messages = get_user_messages(user_id, limit=50)
-
-    if not user_messages:
-        update.message.reply_text("У вас нет сообщений для анализа.")
-        return
-
-    # Очищаем сообщения
-    user_messages = clean_messages(user_messages)
-
-    # Генерируем описание пользователя на основе его сообщений
-    description = generate_user_description(user_messages, user_first_name)
-
-    # Отправляем описание пользователю
-    update.message.reply_text(description)
-
 def process_video_message(video_message, user_id):
     """Обрабатывает видео сообщение и возвращает текст из него"""
     logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
@@ -346,16 +348,10 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Проверка на наличие слова "геи" для генерации шутки
-    if "геи" in user_message.lower():
-        joke = generate_joke()
-        update.message.reply_text(joke)
-        return
-
     # Если сообщение содержит запрос на рисование
     if is_drawing_request(user_message):
-        # Здесь можно извлечь текст после ключевого слова для создания изображения
-        prompt = user_message
+        # Извлекаем текст после ключевого слова для создания изображения
+        prompt = clean_drawing_prompt(user_message)
         image_url = generate_image(prompt)
         send_image(update, context, image_url)
         return
@@ -392,6 +388,101 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     # Логирование взаимодействия
     log_interaction(user_id, user_message, reply)
 
+    # Сохраняем сообщение в базу данных
+    save_user_message(update.message)
+
+def save_user_message(message: Message) -> None:
+    """Сохраняет сообщение пользователя в базу данных."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user = message.from_user
+    cursor.execute('''
+        INSERT INTO messages (chat_id, user_id, text, date, user_first_name, user_last_name, user_username)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    ''', (
+        message.chat_id,
+        user.id,
+        message.text,
+        message.date,
+        user.first_name,
+        user.last_name,
+        user.username
+    ))
+    conn.commit()
+    conn.close()
+
+def get_user_messages(user_id: int, limit=50) -> list:
+    """Получает последние сообщения пользователя из базы данных."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT text FROM messages WHERE user_id = %s ORDER BY date DESC LIMIT %s
+    ''', (user_id, limit))
+
+    messages = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return messages
+
+def clean_messages(messages: list) -> list:
+    """Очищает сообщения от потенциально нежелательного контента."""
+    cleaned_messages = []
+    for msg in messages:
+        # Здесь можно добавить логику очистки текста, если необходимо
+        cleaned_messages.append(msg)
+    return cleaned_messages
+
+def generate_user_description(messages: list, user_first_name: str) -> str:
+    """Генерирует описание пользователя на основе его сообщений."""
+    # Объединяем сообщения в один текст
+    combined_messages = "\n".join(messages)
+
+    # Формируем запрос для OpenAI
+    prompt = f"""
+    Проанализируй следующие сообщения пользователя и опиши его личность, интересы и стиль общения. Используй дружелюбный тон.
+
+    Сообщения пользователя:
+    {combined_messages}
+
+    Описание пользователя {user_first_name}:
+    """
+
+    try:
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=200,
+            n=1,
+            stop=None,
+            temperature=0.7,
+        )
+        description = response.choices[0].text.strip()
+        return description
+    except Exception as e:
+        logger.error(f"Ошибка при генерации описания пользователя: {str(e)}")
+        return "Извините, не удалось создать описание."
+
+def describe_user(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    user_first_name = update.message.from_user.first_name
+
+    # Получаем сообщения пользователя из базы данных
+    user_messages = get_user_messages(user_id, limit=50)
+
+    if not user_messages:
+        update.message.reply_text("У вас нет сообщений для анализа.")
+        return
+
+    # Очищаем сообщения
+    user_messages = clean_messages(user_messages)
+
+    # Генерируем описание пользователя на основе его сообщений
+    description = generate_user_description(user_messages, user_first_name)
+
+    # Отправляем описание пользователю
+    update.message.reply_text(description)
+
 def main():
     # Создаем апдейтера и диспетчера
     updater = Updater(TELEGRAM_TOKEN)
@@ -402,6 +493,7 @@ def main():
 
     # Регистрируем обработчики
     dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("describe_me", describe_user))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
     dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
