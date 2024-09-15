@@ -8,10 +8,9 @@ from datetime import datetime
 from io import BytesIO
 
 from decouple import config
-from telegram import Update, Message
+from telegram import Update, Message, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from telegram import ParseMode
-from telegram.helpers import escape
+from telegram.utils.helpers import escape_markdown
 import openai
 import speech_recognition as sr
 from pydub import AudioSegment
@@ -70,14 +69,14 @@ def add_emojis_at_end(answer: str) -> str:
 
 def format_markdown(answer: str) -> str:
     """Форматирует текст ответа, заменяя заголовки на markdown-разметку и экранируя специальные символы."""
-    # Заменяем заголовки '#### ' на '*текст*' для курсива
-    answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
-    # Заменяем заголовки '### ' на '_текст_' для курсива
-    answer = re.sub(r'^### (.+)$', r'_\1_', answer, flags=re.MULTILINE)
+    # Заменяем заголовки '#### ' на '**' для жирного текста
+    answer = re.sub(r'^#### (.+)$', r'**\1**', answer, flags=re.MULTILINE)
+    # Заменяем заголовки '### ' на '*' для курсива
+    answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
     # Экранируем специальные символы для Markdown
-    answer = escape(answer)
+    answer = escape_markdown(answer, version=2)
     return answer
 
 # Создание базы данных для логирования
@@ -141,7 +140,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=messages,
             max_tokens=500,  # Увеличено значение max_tokens
             temperature=0.7
@@ -168,7 +167,7 @@ def generate_joke() -> str:
             "role": "system",
             "content": (
                 "Ты — бот, который придумывает смешные анекдоты. "
-                "Придумай короткий необидный анекдот про алкоголичку Инну."
+                "Придумай короткий необидный анекдот про слона."
             )
         }
     ]
