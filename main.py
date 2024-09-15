@@ -70,22 +70,29 @@ def add_emojis_at_end(answer: str) -> str:
     return f"{answer} {escaped_emojis}"
 
 def format_markdown(answer: str) -> str:
-    """Форматирует текст ответа, заменяя заголовки на markdown-разметку и экранируя специальные символы."""
-    # Заменяем заголовки '#### ' на '**текст**' для жирного текста
-    answer = re.sub(r'^#### (.+)$', r'**\1**', answer, flags=re.MULTILINE)
-    # Заменяем заголовки '### ' на '*текст*' для курсива
-    answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
+    # Сначала заменяем заголовки на Markdown-разметку
+    answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)  # Курсив
+    answer = re.sub(r'^### (.+)$', r'__\1__', answer, flags=re.MULTILINE)  # Подчёркнутый текст
+    answer = re.sub(r'^## (.+)$', r'*\*\*\1\*\*\*', answer, flags=re.MULTILINE)  # Жирный курсив
+    answer = re.sub(r'^# (.+)$', r'**\1**', answer, flags=re.MULTILINE)  # Жирный текст
+
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
 
-    # Список символов, требующих экранирования в MarkdownV2
+    # Список специальных символов для экранирования в MarkdownV2
     escape_chars = r'_*\[\]()~`>#+-=|{}.!'
 
-    # Экранируем специальные символы
+    # Функция для экранирования специальных символов, кроме разметки
     def escape_special_chars(text):
-        return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+        # Экранируем все специальные символы
+        text = re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+        # Возвращаем символы разметки обратно (не экранированные)
+        text = text.replace(r'\*', '*').replace(r'\_', '_')
+        return text
 
+    # Применяем экранирование
     answer = escape_special_chars(answer)
+
     return answer
 
 # Создание базы данных для логирования
