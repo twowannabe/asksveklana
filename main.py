@@ -68,13 +68,15 @@ def add_emojis_at_end(answer: str) -> str:
     return f"{answer} {chosen_emojis}"
 
 def format_markdown(answer: str) -> str:
-    """Форматирует текст ответа, заменяя заголовки на markdown-разметку."""
+    """Форматирует текст ответа, заменяя заголовки на markdown-разметку и экранируя специальные символы."""
     # Заменяем заголовки '#### ' на '**' для жирного текста
-    answer = re.sub(r'^#### (.+)$', r'**\1**', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
     # Заменяем заголовки '### ' на '*' для курсива
-    answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^### (.+)$', r'_\1_', answer, flags=re.MULTILINE)
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
+    # Экранируем специальные символы для Markdown V2
+    answer = escape_markdown(answer, version=2)
     return answer
 
 # Создание базы данных для логирования
