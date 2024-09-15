@@ -141,7 +141,7 @@ def ask_chatgpt(messages) -> str:
             model="gpt-4o",
             messages=messages,
             max_tokens=250,  # Увеличено с 150 до 250
-            temperature=0.7   # Снижено с 0.5 до 0.3
+            temperature=0.7,   # Снижено с 0.5 до 0.3
             presence_penalty=0.5,
             frequency_penalty=0.5
         )
