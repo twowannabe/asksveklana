@@ -1,12 +1,6 @@
 import logging
 import re
-import os
-import random
-import sqlite3
 from collections import defaultdict
-from datetime import datetime
-from io import BytesIO
-
 from decouple import config
 from telegram import Update, ParseMode, Message
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
@@ -14,7 +8,12 @@ import openai
 import speech_recognition as sr
 from pydub import AudioSegment
 import moviepy.editor as mp
+import os
+import sqlite3
+from datetime import datetime
 import requests
+from io import BytesIO
+import random
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -38,14 +37,7 @@ conversation_context = defaultdict(list)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {
-        "role": "system",
-        "content": (
-            "Ты Светлана — молодая девушка, которая переписывается на русском языке. "
-            "Ты дружелюбная и игривая, используешь эмодзи в конце сообщений. "
-            "Отвечай кратко и понятно, используя markdown-разметку для выделения текста (жирный, курсив)."
-        )
-    }
+    {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
 def add_emojis_at_end(answer: str) -> str:
@@ -61,16 +53,6 @@ def add_emojis_at_end(answer: str) -> str:
     chosen_emojis = ''.join(random.choices(emojis, k=num_emojis))
 
     return f"{answer} {chosen_emojis}"
-
-def format_markdown(answer: str) -> str:
-    """Форматирует текст ответа, заменяя заголовки на markdown-разметку."""
-    # Заменяем заголовки '#### ' на '**' для жирного текста
-    answer = re.sub(r'^#### (.+)$', r'**\1**', answer, flags=re.MULTILINE)
-    # Заменяем заголовки '### ' на '*' для курсива
-    answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
-    # Убираем лишние пустые строки
-    answer = re.sub(r'\n{2,}', '\n', answer)
-    return answer
 
 # Создание базы данных для логирования
 def init_db():
@@ -98,11 +80,7 @@ def clean_drawing_prompt(prompt: str) -> str:
 
 def is_drawing_request(message: str) -> bool:
     """Определяет, является ли сообщение запросом на рисование или показ изображения."""
-    drawing_keywords = [
-        "нарисуй", "создай", "изобрази", "сгенерируй",
-        "покажи картинку", "сделай изображение",
-        "покажи как выглядит", "покажи как они выглядели"
-    ]
+    drawing_keywords = ["нарисуй", "создай", "изобрази", "сгенерируй", "покажи картинку", "сделай изображение", "покажи как выглядит", "покажи как они выглядели"]
     message = message.lower()
     return any(keyword in message for keyword in drawing_keywords)
 
@@ -133,19 +111,14 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=messages,
-            max_tokens=150,
-            temperature=0.5
+            model="gpt-4o",
+            messages=messages
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
 
-        # Форматируем ответ
-        formatted_answer = format_markdown(answer)
-
         # Удаляем только скобочки перед добавлением эмодзи
-        clean_answer = formatted_answer.replace(')', '').replace('(', '')
+        clean_answer = answer.replace(')', '').replace('(', '')
 
         return add_emojis_at_end(clean_answer)
     except Exception as e:
@@ -156,13 +129,7 @@ def ask_chatgpt(messages) -> str:
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
-        {
-            "role": "system",
-            "content": (
-                "Ты — бот, который придумывает смешные анекдоты. "
-                "Придумай короткий необидный анекдот про слона."
-            )
-        }
+        {"role": "system", "content": "Ты - бот, который придумывает смешные анекдоты. Придумай короткий необидный анекдот про фембоя и лезбиянку Нину."}
     ]
     return ask_chatgpt(joke_prompt)
 
@@ -186,7 +153,7 @@ def generate_image(prompt: str) -> str:
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я — Светлана, твоя виртуальная подруга. Давай пообщаемся! 😊')
+    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 def extract_text_from_message(message: Message) -> str:
     """Извлекает текст из сообщения, если текст доступен."""
@@ -367,8 +334,8 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
 
     # Если сообщение содержит запрос на рисование
     if is_drawing_request(user_message):
-        # Извлекаем текст после ключевого слова для создания изображения
-        prompt = clean_drawing_prompt(user_message)
+        # Здесь можно извлечь текст после ключевого слова для создания изображения
+        prompt = user_message
         image_url = generate_image(prompt)
         send_image(update, context, image_url)
         return
