@@ -450,7 +450,7 @@ def generate_user_description(messages: list, user_first_name: str) -> str:
 
     try:
         response = openai.Completion.create(
-            engine="text-davinci-003",
+            engine="gpt-4o",
             prompt=prompt,
             max_tokens=200,
             n=1,
