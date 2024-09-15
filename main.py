@@ -54,29 +54,38 @@ initial_instructions = [
 ]
 
 def add_emojis_at_end(answer: str) -> str:
-    """Добавляет несколько эмодзи в конец ответа."""
+    """Добавляет несколько эмодзи в конец ответа, экранируя их для MarkdownV2."""
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
 
-    # Определяем, нужно ли добавлять эмодзи в это сообщение
+    # Решаем, добавлять ли эмодзи
     if random.choice([True, False]):
         return answer
 
-    # Определяем количество эмодзи
     num_emojis = random.randint(1, 3)
     chosen_emojis = ''.join(random.choices(emojis, k=num_emojis))
 
-    return f"{answer} {chosen_emojis}"
+    # Экранируем эмодзи
+    escaped_emojis = ''.join(['\\' + emoji for emoji in chosen_emojis])
+
+    return f"{answer} {escaped_emojis}"
 
 def format_markdown(answer: str) -> str:
     """Форматирует текст ответа, заменяя заголовки на markdown-разметку и экранируя специальные символы."""
-    # Заменяем заголовки '#### ' на '**' для жирного текста
+    # Заменяем заголовки '#### ' на '**текст**' для жирного текста
     answer = re.sub(r'^#### (.+)$', r'**\1**', answer, flags=re.MULTILINE)
-    # Заменяем заголовки '### ' на '*' для курсива
+    # Заменяем заголовки '### ' на '*текст*' для курсива
     answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
-    # Экранируем специальные символы для Markdown
-    answer = escape_markdown(answer, version=2)
+
+    # Список символов, требующих экранирования в MarkdownV2
+    escape_chars = r'_*\[\]()~`>#+-=|{}.!'
+
+    # Экранируем специальные символы
+    def escape_special_chars(text):
+        return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+    answer = escape_special_chars(answer)
     return answer
 
 # Создание базы данных для логирования
@@ -350,6 +359,9 @@ def handle_video(update: Update, context: CallbackContext) -> None:
 
 # Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
+    # Логируем отправляемое сообщение
+    logger.info(f"Отправляемое сообщение: {reply}")
+
     if not update.message:
         return
 
@@ -412,7 +424,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     # Отправляем ответ пользователю с обработкой исключений
     try:
         update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
-    except Exception as e:
+    except telegram.error.BadRequest as e:
         logger.error(f"Ошибка при отправке сообщения: {e}")
         update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
