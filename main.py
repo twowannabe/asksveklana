@@ -128,7 +128,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Или "gpt-3.5-turbo"
+            model="gpt-3.5-turbo",  # Или "gpt-3.5-turbo"
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
