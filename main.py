@@ -242,6 +242,26 @@ def process_voice_message(voice_message, user_id):
             os.remove(voice_file_path)
             os.remove(wav_file_path)
 
+def describe_user(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    user_first_name = update.message.from_user.first_name
+
+    # Получаем сообщения пользователя из базы данных
+    user_messages = get_user_messages(user_id, limit=50)
+
+    if not user_messages:
+        update.message.reply_text("У вас нет сообщений для анализа.")
+        return
+
+    # Очищаем сообщения
+    user_messages = clean_messages(user_messages)
+
+    # Генерируем описание пользователя на основе его сообщений
+    description = generate_user_description(user_messages, user_first_name)
+
+    # Отправляем описание пользователю
+    update.message.reply_text(description)
+
 def process_video_message(video_message, user_id):
     """Обрабатывает видео сообщение и возвращает текст из него"""
     logger.info(f"Начало обработки видео сообщения от пользователя {user_id}")
