@@ -54,7 +54,7 @@ initial_instructions = [
 ]
 
 def add_emojis_at_end(answer: str) -> str:
-    """Добавляет несколько эмодзи в конец ответа, экранируя их для MarkdownV2."""
+    """Добавляет несколько эмодзи в конец ответа."""
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
 
     # Решаем, добавлять ли эмодзи
@@ -64,10 +64,7 @@ def add_emojis_at_end(answer: str) -> str:
     num_emojis = random.randint(1, 3)
     chosen_emojis = ''.join(random.choices(emojis, k=num_emojis))
 
-    # Экранируем эмодзи
-    escaped_emojis = ''.join(['\\' + emoji for emoji in chosen_emojis])
-
-    return f"{answer} {escaped_emojis}"
+    return f"{answer} {chosen_emojis}"
 
 def format_markdown(answer: str) -> str:
     # Экранируем точки в нумерованных списках
@@ -75,24 +72,20 @@ def format_markdown(answer: str) -> str:
 
     # Заменяем заголовки на Markdown-разметку
     answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
-    answer = re.sub(r'^### (.+)$', r'_\1_', answer, flags=re.MULTILINE)
-    answer = re.sub(r'^## (.+)$', r'*\*\*\1\*\*\*', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^## (.+)$', r'***\1***', answer, flags=re.MULTILINE)
     answer = re.sub(r'^# (.+)$', r'**\1**', answer, flags=re.MULTILINE)
 
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
 
-    # Список специальных символов для экранирования
-    escape_chars = r'_*\[\]()~`>#+-=|{}.!'
+    # Экранируем специальные символы для Markdown V1
+    escape_chars = r'_*`['
 
-    # Экранируем специальные символы, кроме тех, что используются для разметки
     def escape_special_chars(text):
-        text = re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
-        text = text.replace(r'\*', '*').replace(r'\_', '_')
-        return text
+        return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
     answer = escape_special_chars(answer)
-
     return answer
 
 # Создание базы данных для логирования
@@ -427,7 +420,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         # Логируем отправляемое сообщение внутри try-блока
         logger.info(f"Отправляемое сообщение: {reply}")
 
-        update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
+        update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         logger.error(f"Ошибка при отправке сообщения: {e}")
         update.message.reply_text("Произошла ошибка при отправке сообщения.")
