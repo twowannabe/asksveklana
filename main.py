@@ -70,27 +70,27 @@ def add_emojis_at_end(answer: str) -> str:
     return f"{answer} {escaped_emojis}"
 
 def format_markdown(answer: str) -> str:
-    # Сначала заменяем заголовки на Markdown-разметку
-    answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)  # Курсив
-    answer = re.sub(r'^### (.+)$', r'__\1__', answer, flags=re.MULTILINE)  # Подчёркнутый текст
-    answer = re.sub(r'^## (.+)$', r'*\*\*\1\*\*\*', answer, flags=re.MULTILINE)  # Жирный курсив
-    answer = re.sub(r'^# (.+)$', r'**\1**', answer, flags=re.MULTILINE)  # Жирный текст
+    # Экранируем точки в нумерованных списках
+    answer = re.sub(r'^(\d+)\.', r'\1\\.', answer, flags=re.MULTILINE)
+
+    # Заменяем заголовки на Markdown-разметку
+    answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^### (.+)$', r'_\1_', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^## (.+)$', r'*\*\*\1\*\*\*', answer, flags=re.MULTILINE)
+    answer = re.sub(r'^# (.+)$', r'**\1**', answer, flags=re.MULTILINE)
 
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
 
-    # Список специальных символов для экранирования в MarkdownV2
+    # Список специальных символов для экранирования
     escape_chars = r'_*\[\]()~`>#+-=|{}.!'
 
-    # Функция для экранирования специальных символов, кроме разметки
+    # Экранируем специальные символы, кроме тех, что используются для разметки
     def escape_special_chars(text):
-        # Экранируем все специальные символы
         text = re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
-        # Возвращаем символы разметки обратно (не экранированные)
         text = text.replace(r'\*', '*').replace(r'\_', '_')
         return text
 
-    # Применяем экранирование
     answer = escape_special_chars(answer)
 
     return answer
