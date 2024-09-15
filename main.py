@@ -8,14 +8,15 @@ from datetime import datetime
 from io import BytesIO
 
 from decouple import config
-from telegram import Update, ParseMode, Message
+from telegram import Update, Message
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.constants import ParseMode
+from telegram.helpers import escape
 import openai
 import speech_recognition as sr
 from pydub import AudioSegment
 import moviepy.editor as mp
 import requests
-from telegram.utils.helpers import escape_markdown
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -42,7 +43,7 @@ initial_instructions = [
     {
         "role": "system",
         "content": (
-            "Ты Свеклана — молодая девушка, которая переписывается на русском языке. "
+            "Ты Светлана — молодая девушка, которая переписывается на русском языке. "
             "Ты дружелюбная и игривая, используешь эмодзи в конце сообщений. "
             "Отвечай понятно и интересно, используя markdown-разметку для выделения текста (жирный, курсив). "
             "Например:\n"
@@ -52,7 +53,6 @@ initial_instructions = [
         )
     }
 ]
-
 
 def add_emojis_at_end(answer: str) -> str:
     """Добавляет несколько эмодзи в конец ответа."""
@@ -70,14 +70,14 @@ def add_emojis_at_end(answer: str) -> str:
 
 def format_markdown(answer: str) -> str:
     """Форматирует текст ответа, заменяя заголовки на markdown-разметку и экранируя специальные символы."""
-    # Заменяем заголовки '#### ' на '**' для жирного текста
+    # Заменяем заголовки '#### ' на '*текст*' для курсива
     answer = re.sub(r'^#### (.+)$', r'*\1*', answer, flags=re.MULTILINE)
-    # Заменяем заголовки '### ' на '*' для курсива
+    # Заменяем заголовки '### ' на '_текст_' для курсива
     answer = re.sub(r'^### (.+)$', r'_\1_', answer, flags=re.MULTILINE)
     # Убираем лишние пустые строки
     answer = re.sub(r'\n{2,}', '\n', answer)
-    # Экранируем специальные символы для Markdown V2
-    answer = escape_markdown(answer, version=2)
+    # Экранируем специальные символы для Markdown
+    answer = escape(answer)
     return answer
 
 # Создание базы данных для логирования
@@ -143,10 +143,8 @@ def ask_chatgpt(messages) -> str:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=messages,
-            max_tokens=250,  # Увеличено с 150 до 250
-            temperature=0.7,   # Снижено с 0.5 до 0.3
-            presence_penalty=0.5,
-            frequency_penalty=0.5
+            max_tokens=500,  # Увеличено значение max_tokens
+            temperature=0.7
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
@@ -163,7 +161,6 @@ def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
 
-
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
     joke_prompt = [
@@ -171,7 +168,7 @@ def generate_joke() -> str:
             "role": "system",
             "content": (
                 "Ты — бот, который придумывает смешные анекдоты. "
-                "Придумай короткий необидный анекдот про аклоголичку Инну."
+                "Придумай короткий необидный анекдот про алкоголичку Инну."
             )
         }
     ]
@@ -410,8 +407,15 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     # Добавляем ответ ChatGPT в контекст
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Отправляем ответ пользователю
-    update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+    # Логируем отправляемое сообщение
+    logger.info(f"Отправляемое сообщение: {reply}")
+
+    # Отправляем ответ пользователю с обработкой исключений
+    try:
+        update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения: {e}")
+        update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
     # Логирование взаимодействия
     log_interaction(user_id, user_message, reply)
