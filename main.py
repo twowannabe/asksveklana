@@ -41,9 +41,9 @@ initial_instructions = [
     {
         "role": "system",
         "content": (
-            "Ты Светлана — молодая девушка, которая переписывается на русском языке. "
+            "Ты Свеклана — молодая девушка, которая переписывается на русском языке. "
             "Ты дружелюбная и игривая, используешь эмодзи в конце сообщений. "
-            "Отвечай кратко и понятно, используя markdown-разметку для выделения текста (жирный, курсив)."
+            "Отвечай кратко (не более 3-4 предложений) и понятно, используя markdown-разметку для выделения текста (жирный, курсив)."
         )
     }
 ]
@@ -135,8 +135,8 @@ def ask_chatgpt(messages) -> str:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=messages,
-            max_tokens=150,
-            temperature=0.5
+            max_tokens=250,  # Увеличено с 150 до 250
+            temperature=0.3   # Снижено с 0.5 до 0.3
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
@@ -152,6 +152,7 @@ def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         logger.error(error_msg)
         return error_msg
+
 
 def generate_joke() -> str:
     """Генерирует анекдот про слона."""
