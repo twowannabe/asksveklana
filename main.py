@@ -1,4 +1,5 @@
 import re
+import logging
 from collections import defaultdict
 from decouple import config
 from telegram import Update, ParseMode, Message
@@ -11,6 +12,18 @@ import os
 import requests
 from io import BytesIO
 import random
+
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Настройка логирования для других библиотек
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -30,12 +43,9 @@ initial_instructions = [
 def add_emojis_at_end(answer: str) -> str:
     """Добавляет несколько эмодзи в конец ответа."""
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
-
-    # Определяем, нужно ли добавлять эмодзи в это сообщение
     if random.choice([True, False]):
         return answer
 
-    # Определяем количество эмодзи
     num_emojis = random.randint(1, 3)
     chosen_emojis = ''.join(random.choices(emojis, k=num_emojis))
 
@@ -62,29 +72,28 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         image.name = 'image.png'  # Даем имя файлу, чтобы Telegram его распознал
         update.message.reply_photo(photo=image)
     except Exception as e:
-        error_msg = f"Ошибка при отправке изображения: {str(e)}"
-        update.message.reply_text(error_msg)
+        logger.error(f"Ошибка при отправке изображения: {str(e)}")
+        update.message.reply_text(f"Ошибка при отправке изображения: {str(e)}")
 
-# Функция для отправки сообщения в ChatGPT и получения ответа
 def ask_chatgpt(messages) -> str:
+    """Отправка сообщений в ChatGPT и получение ответа."""
+    logger.info(f"Отправка запросов в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",  # Или "gpt-3.5-turbo"
             messages=messages
         )
         answer = response.choices[0].message['content'].strip()
-
-        # Удаляем только скобочки перед добавлением эмодзи
+        logger.info(f"Ответ ChatGPT: {answer}")
         clean_answer = answer.replace(')', '').replace('(', '')
-
         return add_emojis_at_end(clean_answer)
     except Exception as e:
-        error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
-        return error_msg
+        logger.error(f"Ошибка при обращении к ChatGPT: {str(e)}")
+        return f"Ошибка при обращении к ChatGPT: {str(e)}"
 
-# Функция для генерации изображений
 def generate_image(prompt: str) -> str:
     """Генерирует изображение по заданному текстовому описанию."""
+    logger.info(f"Отправка запроса на генерацию изображения: {prompt}")
     try:
         response = openai.Image.create(
             prompt=prompt,
@@ -92,13 +101,15 @@ def generate_image(prompt: str) -> str:
             size="1024x1024"
         )
         image_url = response['data'][0]['url']
+        logger.info(f"Ссылка на сгенерированное изображение: {image_url}")
         return image_url
     except Exception as e:
-        error_msg = f"Ошибка при создании изображения: {str(e)}"
-        return error_msg
+        logger.error(f"Ошибка при создании изображения: {str(e)}")
+        return f"Ошибка при создании изображения: {str(e)}"
 
-# Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
+    """Обработчик команды /start."""
+    logger.info("Команда /start вызвана.")
     update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 def extract_text_from_message(message: Message) -> str:
@@ -112,25 +123,21 @@ def extract_text_from_message(message: Message) -> str:
 def should_respond(update: Update, context: CallbackContext) -> bool:
     """Проверяет, должен ли бот отвечать на сообщение."""
     message = update.message
+    bot_username = context.bot.username
 
     if not message:
         return False
 
-    bot_username = context.bot.username
-
-    # 1. Если упомянули никнейм бота
     if message.entities:
         for entity in message.entities:
             if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
                 return True
 
-    # 2. Если ответили на сообщение бота
     if message.reply_to_message:
         if message.reply_to_message.from_user.username == bot_username:
             return True
 
-    # 3. Если упомянули бота и ответили на чьё-то сообщение
-    if message.reply_to_message:
+    if message.reply_to_message and message.reply_to_message.voice:
         if message.entities:
             for entity in message.entities:
                 if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
@@ -138,118 +145,103 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
 
     return False
 
-# Функция для обработки голосовых сообщений
+def get_user_identifier(update: Update) -> str:
+    """Возвращает username, если он есть, иначе user_id."""
+    user = update.message.from_user
+    return user.username if user.username else str(user.id)
+
 def process_voice_message(voice_message, user_id):
-    """Обрабатывает голосовое сообщение и преобразует его в текст."""
+    """Обрабатывает голосовое сообщение и преобразует его в текст без сохранения на диск."""
+    logger.info(f"Обработка голосового сообщения от пользователя {user_id}.")
     file_id = voice_message.file_id
     new_file = voice_message.get_file()
 
-    # Скачиваем файл
-    file_path = f"voice_{user_id}.ogg"
-    new_file.download(file_path)
+    voice_file = BytesIO()
+    new_file.download(out=voice_file)
+    voice_file.seek(0)
 
-    # Преобразование OGG в WAV для распознавания
-    sound = AudioSegment.from_ogg(file_path)
-    wav_path = f"voice_{user_id}.wav"
-    sound.export(wav_path, format="wav")
+    sound = AudioSegment.from_ogg(voice_file)
+    wav_io = BytesIO()
+    sound.export(wav_io, format="wav")
+    wav_io.seek(0)
 
-    # Распознавание речи
     recognizer = sr.Recognizer()
-    with sr.AudioFile(wav_path) as source:
+    with sr.AudioFile(wav_io) as source:
         audio_data = recognizer.record(source)
         try:
             text = recognizer.recognize_google(audio_data, language="ru-RU")
-            os.remove(file_path)  # Удаляем временные файлы
-            os.remove(wav_path)
+            logger.info(f"Распознанный текст из голосового сообщения: {text}")
             return text
         except sr.UnknownValueError:
+            logger.warning("Не удалось распознать голосовое сообщение.")
             return "Извините, я не смог распознать голосовое сообщение."
         except sr.RequestError:
+            logger.error("Ошибка при распознавании голоса.")
             return "Ошибка при распознавании голоса."
 
-# Функция для обработки видеосообщений
 def process_video_message(video_message, user_id):
     """Обрабатывает видеосообщение и извлекает его аудиодорожку для распознавания речи."""
-    file_id = video_message.file_id
+    logger.info(f"Обработка видеосообщения от пользователя {user_id}.")
+
     new_file = video_message.get_file()
 
-    # Скачиваем видеофайл
-    file_path = f"video_{user_id}.mp4"
-    new_file.download(file_path)
+    video_file = BytesIO()
+    new_file.download(out=video_file)
+    video_file.seek(0)
 
-    # Извлечение аудио из видео
     try:
-        video = mp.VideoFileClip(file_path)
-        audio_path = f"audio_from_video_{user_id}.wav"
-        video.audio.write_audiofile(audio_path)
+        video = mp.VideoFileClip(video_file)
+        audio_io = BytesIO()
+        video.audio.write_audiofile(audio_io, codec='pcm_s16le')
+        audio_io.seek(0)
 
-        # Распознавание речи с аудиодорожки
         recognizer = sr.Recognizer()
-        with sr.AudioFile(audio_path) as source:
+        with sr.AudioFile(audio_io) as source:
             audio_data = recognizer.record(source)
             try:
                 text = recognizer.recognize_google(audio_data, language="ru-RU")
-                os.remove(file_path)  # Удаляем временные файлы
-                os.remove(audio_path)
+                logger.info(f"Распознанный текст из видео: {text}")
                 return text
             except sr.UnknownValueError:
+                logger.warning("Не удалось распознать аудио из видео.")
                 return "Извините, я не смог распознать аудио из видео."
             except sr.RequestError:
+                logger.error("Ошибка при распознавании аудио из видео.")
                 return "Ошибка при распознавании аудио из видео."
     except Exception as e:
+        logger.error(f"Ошибка при обработке видео: {str(e)}")
         return f"Ошибка при обработке видео: {str(e)}"
 
-# Обработчик голосовых сообщений
-def handle_voice(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    voice_message = update.message.voice
-
-    # Обрабатываем голосовое сообщение и получаем текст
-    user_message = process_voice_message(voice_message, user_id)
-    if not user_message:
-        return
-
-    # Добавляем сообщение пользователя в контекст
-    conversation_context[user_id].append({"role": "user", "content": user_message})
-
-    # Подготавливаем сообщения для отправки в ChatGPT
-    messages = initial_instructions + conversation_context[user_id]
-
-    # Получаем ответ от ChatGPT
-    reply = ask_chatgpt(messages)
-
-    # Добавляем ответ ChatGPT в контекст
-    conversation_context[user_id].append({"role": "assistant", "content": reply})
-
-    # Отправляем ответ пользователю
-    update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
-
-# Обработчик видеосообщений
 def handle_video(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
-    video_message = update.message.video
+    user_identifier = get_user_identifier(update)
 
-    # Обрабатываем видеосообщение и получаем текст
-    user_message = process_video_message(video_message, user_id)
+    # Проверяем, это видео или видеозаметка (кружочек)
+    if update.message.video_note:
+        video_message = update.message.video_note
+        logger.info(f"Обработка видеозаметки (кружочек) от пользователя {user_identifier}.")
+    elif update.message.video:
+        video_message = update.message.video
+        logger.info(f"Обработка видеосообщения от пользователя {user_identifier}.")
+    else:
+        logger.info(f"Сообщение не является видео или кружочком.")
+        return
+
+    # Проверяем, упомянули ли бота в ответе на видео/кружочек
+    if not should_respond(update, context):
+        return
+
+    user_message = process_video_message(video_message, user_identifier)
     if not user_message:
         return
 
-    # Добавляем сообщение пользователя в контекст
-    conversation_context[user_id].append({"role": "user", "content": user_message})
+    conversation_context[user_identifier].append({"role": "user", "content": user_message})
 
-    # Подготавливаем сообщения для отправки в ChatGPT
-    messages = initial_instructions + conversation_context[user_id]
-
-    # Получаем ответ от ChatGPT
+    messages = initial_instructions + conversation_context[user_identifier]
     reply = ask_chatgpt(messages)
 
-    # Добавляем ответ ChatGPT в контекст
-    conversation_context[user_id].append({"role": "assistant", "content": reply})
-
-    # Отправляем ответ пользователю
+    conversation_context[user_identifier].append({"role": "assistant", "content": reply})
     update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
 
-# Обработчик текстовых сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
     if not update.message:
         return
@@ -267,9 +259,7 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
         if not user_message:
             return
 
-    # Если сообщение содержит запрос на рисование
     if is_drawing_request(user_message):
-        # Здесь можно извлечь текст после ключевого слова для создания изображения
         prompt = clean_drawing_prompt(user_message)
         image_url = generate_image(prompt)
         send_image(update, context, image_url)
@@ -278,7 +268,6 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     if not is_voice and not is_video and not should_respond(update, context):
         return
 
-    # Если сообщение является ответом и содержит упоминание бота, обрабатываем оригинальное сообщение
     if update.message.reply_to_message and not is_voice and not is_video:
         original_message = extract_text_from_message(update.message.reply_to_message)
         if not original_message and update.message.reply_to_message.voice:
@@ -289,33 +278,22 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
             return
         user_message = f"{original_message} {user_message}"
 
-    # Добавляем сообщение пользователя в контекст
     conversation_context[user_id].append({"role": "user", "content": user_message})
 
-    # Подготавливаем сообщения для отправки в ChatGPT
     messages = initial_instructions + conversation_context[user_id]
-
-    # Получаем ответ от ChatGPT
     reply = ask_chatgpt(messages)
 
-    # Добавляем ответ ChatGPT в контекст
     conversation_context[user_id].append({"role": "assistant", "content": reply})
-
-    # Отправляем ответ пользователю
     update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
 
 def main():
-    # Создаем апдейтера и диспетчера
     updater = Updater(TELEGRAM_TOKEN)
     dispatcher = updater.dispatcher
 
-    # Регистрируем обработчики
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
-    dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
+    dispatcher.add_handler(MessageHandler(Filters.video | Filters.video_note, handle_video))  # Обработка видео и кружочков
 
-    # Запуск бота
     updater.start_polling()
     updater.idle()
 
