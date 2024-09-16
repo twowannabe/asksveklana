@@ -212,6 +212,10 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
     return False
 
 def process_voice_message(voice_message, user_id):
+    if voice_message is None:
+        logger.error("Голосовое сообщение не найдено")
+        return None
+
     voice_file_path = f"voice_{user_id}.ogg"
     file = voice_message.get_file()
     file.download(voice_file_path)
