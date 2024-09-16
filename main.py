@@ -71,7 +71,7 @@ def init_db():
         )
         cursor = conn.cursor()
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS logs (
+        CREATE TABLE IF NOT EXISTS askgbt_logs (
             id SERIAL PRIMARY KEY,
             user_id INTEGER,
             user_message TEXT,
@@ -123,7 +123,7 @@ def log_interaction(user_id, user_message, gpt_reply):
         cursor = conn.cursor()
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cursor.execute('''
-        INSERT INTO logs (user_id, user_message, gpt_reply, timestamp)
+        INSERT INTO askgbt_logs (user_id, user_message, gpt_reply, timestamp)
         VALUES (%s, %s, %s, %s)
         ''', (user_id, user_message, gpt_reply, timestamp))
         conn.commit()
@@ -176,7 +176,7 @@ def generate_image(prompt: str) -> str:
 
 # Функция старта бота
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я - Джессика, твоя виртуальная подруга. Давай пообщаемся! 😊')
+    update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 def extract_text_from_message(message: Message) -> str:
     if message.text:
