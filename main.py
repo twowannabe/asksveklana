@@ -278,16 +278,22 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
     if not update.message:
         return
 
+    # Проверяем, нужно ли боту отвечать
     if should_respond(update, context):
         user_id = update.message.from_user.id
-        user_message = process_voice_message(update.message.voice, user_id)
+        voice_message = update.message.voice  # Получаем голосовое сообщение от пользователя
 
-        if user_message:
-            if update.message.reply_to_message:
-                update.message.text = user_message
-                handle_message(update, context, is_voice=True)
-            else:
-                update.message.reply_text(user_message)
+        if voice_message:  # Проверяем, существует ли голосовое сообщение
+            # Обрабатываем голосовое сообщение
+            user_message = process_voice_message(voice_message, user_id)
+            if user_message:
+                if update.message.reply_to_message:
+                    update.message.text = user_message
+                    handle_message(update, context, is_voice=True)
+                else:
+                    update.message.reply_text(user_message)
+        else:
+            logger.error("Голосовое сообщение не найдено")
 
 def handle_video(update: Update, context: CallbackContext) -> None:
     if not update.message:
