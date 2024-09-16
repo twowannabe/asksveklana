@@ -44,6 +44,64 @@ initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
+def escape_markdown(text: str) -> str:
+    """Экранирует специальные символы для Markdown."""
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+def get_last_user_messages(user_id: int, limit=50) -> list:
+    """Получает последние 50 сообщений пользователя из базы данных."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT text FROM messages
+        WHERE user_id = %s
+        ORDER BY date DESC LIMIT %s
+    ''', (user_id, limit))
+
+    messages = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return messages
+
+def analyze_user_behavior(messages: list) -> str:
+    """Анализирует поведение пользователя на основе его последних сообщений."""
+    question_count = 0
+    greeting_count = 0
+
+    for msg in messages:
+        if '?' in msg:
+            question_count += 1
+        if any(greeting in msg.lower() for greeting in ['привет', 'здравствуйте', 'добрый']):
+            greeting_count += 1
+
+    # Пример анализа: если больше 5 вопросов, пользователь задает много вопросов
+    if question_count > 5:
+        return "questioner"
+
+    # Если приветствий больше 2
+    elif greeting_count > 2:
+        return "friendly"
+
+    # Если сообщений меньше 10
+    elif len(messages) < 10:
+        return "silent"
+
+    return "neutral"
+
+def generate_response(user_behavior: str, user_first_name: str) -> str:
+    """Генерирует ответ на основе поведения пользователя."""
+    if user_behavior == "questioner":
+        return f"Ух ты, {user_first_name}, у вас много вопросов! Я постараюсь помочь. 😊"
+
+    elif user_behavior == "friendly":
+        return f"Привет-привет, {user_first_name}! Рад(а) видеть вас снова! 🌟"
+
+    elif user_behavior == "silent":
+        return f"{user_first_name}, вы довольно молчаливы сегодня. Как у вас дела? 🙌"
+
+    return f"Привет, {user_first_name}! Чем могу помочь? 🤔"
+
 def get_db_connection():
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -103,11 +161,12 @@ def get_user_messages(user_id: int, limit=50) -> list:
     return messages
 
 def describe_user(update: Update, context: CallbackContext) -> None:
+    """Обрабатывает команду /describe_me для генерации описания пользователя."""
     user_id = update.message.from_user.id
     user_first_name = update.message.from_user.first_name
 
-    # Получаем сообщения пользователя из базы данных
-    user_messages = get_user_messages(user_id, limit=50)
+    # Получаем последние 50 сообщений от пользователя
+    user_messages = get_last_user_messages(user_id)
 
     if not user_messages:
         update.message.reply_text("У вас нет сообщений для анализа.")
@@ -118,6 +177,9 @@ def describe_user(update: Update, context: CallbackContext) -> None:
 
     # Генерируем описание пользователя на основе его сообщений
     description = generate_user_description(user_messages, user_first_name)
+
+    # Экранируем текст перед отправкой в Telegram
+    description = escape_markdown(description)
 
     # Отправляем описание пользователю
     update.message.reply_text(description, parse_mode=ParseMode.MARKDOWN)
@@ -161,42 +223,6 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         conn.close()
     except Exception as e:
         logger.error(f"Ошибка при записи в базу данных: {str(e)}")
-
-# Функция старта бота
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
-
-def extract_text_from_message(message: Message) -> str:
-    if message.text:
-        return message.text.strip()
-    if message.caption:
-        return message.caption.strip()
-    return ""
-
-def should_respond(update: Update, context: CallbackContext) -> bool:
-    message = update.message
-
-    if not message:
-        return False
-
-    bot_username = context.bot.username
-
-    if message.entities:
-        for entity in message.entities:
-            if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
-                logger.info(f"Бот упомянут в сообщении: {message.text}")
-                return True
-
-    if message.reply_to_message:
-        if message.reply_to_message.from_user.username == bot_username:
-            logger.info("Сообщение является ответом на сообщение бота")
-            return True
-
-        if message.reply_to_message.video:
-            logger.info("Сообщение является ответом на видеосообщение")
-            return True
-
-    return False
 
 def process_voice_message(voice_message, user_id):
     if voice_message is None:
