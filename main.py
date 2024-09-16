@@ -77,7 +77,7 @@ def generate_user_description(messages: list, user_first_name: str) -> str:
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Или "gpt-3.5-turbo", если у вас нет доступа к GPT-4
+            model="gpt-4o-mini",  # Или "gpt-3.5-turbo", если у вас нет доступа к GPT-4
             messages=chat_messages,
             max_tokens=200,
             n=1,
