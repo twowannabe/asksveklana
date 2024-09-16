@@ -286,12 +286,13 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
         if voice_message:  # Проверяем, существует ли голосовое сообщение
             # Обрабатываем голосовое сообщение
             user_message = process_voice_message(voice_message, user_id)
+
             if user_message:
-                if update.message.reply_to_message:
-                    update.message.text = user_message
-                    handle_message(update, context, is_voice=True)
-                else:
-                    update.message.reply_text(user_message)
+                # Имитация текстового сообщения, чтобы бот мог ответить как на текстовое сообщение
+                update.message.text = user_message
+                handle_message(update, context, is_voice=True)
+            else:
+                update.message.reply_text("Извините, я не смогла распознать ваше голосовое сообщение.")
         else:
             logger.error("Голосовое сообщение не найдено")
 
