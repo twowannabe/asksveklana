@@ -29,7 +29,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -147,19 +147,6 @@ def generate_user_description(messages: list, user_first_name: str) -> str:
         logger.error(f"Ошибка при генерации описания пользователя: {str(e)}")
         return "Извините, не удалось создать описание."
 
-def get_user_messages(user_id: int, limit=50) -> list:
-    """Получает последние сообщения пользователя из базы данных."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        SELECT text FROM messages WHERE user_id = %s ORDER BY date DESC LIMIT %s
-    ''', (user_id, limit))
-
-    messages = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return messages
-
 def describe_user(update: Update, context: CallbackContext) -> None:
     """Обрабатывает команду /describe_me для генерации описания пользователя."""
     user_id = update.message.from_user.id
@@ -253,7 +240,42 @@ def process_voice_message(voice_message, user_id):
             logger.error(f"Ошибка при обращении к Google API: {str(e)}")
             return None
 
+def extract_text_from_message(message: Message) -> str:
+    """Извлекает текст из сообщения пользователя, либо из caption, если это мультимедийное сообщение."""
+    if message.text:
+        return message.text.strip()
+    if message.caption:
+        return message.caption.strip()
+    return ""
+
+def should_respond(update: Update, context: CallbackContext) -> bool:
+    """Определяет, должен ли бот ответить на сообщение."""
+    message = update.message
+
+    if not message:
+        return False
+
+    bot_username = context.bot.username
+
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+                logger.info(f"Бот упомянут в сообщении: {message.text}")
+                return True
+
+    if message.reply_to_message:
+        if message.reply_to_message.from_user.username == bot_username:
+            logger.info("Сообщение является ответом на сообщение бота")
+            return True
+
+        if message.reply_to_message.video:
+            logger.info("Сообщение является ответом на видеосообщение")
+            return True
+
+    return False
+
 def handle_voice(update: Update, context: CallbackContext) -> None:
+    """Обрабатывает голосовые сообщения."""
     if not update.message:
         return
 
@@ -274,6 +296,7 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
 
 # Основная функция обработки текстовых сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
+    """Основная функция обработки текстовых сообщений."""
     if not update.message:
         return
 
