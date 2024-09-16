@@ -61,6 +61,7 @@ def add_emojis_at_end(answer: str) -> str:
 
 # Создание базы данных для логирования
 # Создание базы данных для логирования
+# Создание базы данных для логирования
 def init_db():
     try:
         conn = psycopg2.connect(
@@ -75,6 +76,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS askgbt_logs (
             id SERIAL PRIMARY KEY,
             user_id BIGINT,
+            user_username TEXT,
             user_message TEXT,
             gpt_reply TEXT,
             timestamp TIMESTAMP
@@ -112,7 +114,7 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         update.message.reply_text(error_msg)
 
 # Логирование взаимодействия
-def log_interaction(user_id, user_message, gpt_reply):
+def log_interaction(user_id, user_username, user_message, gpt_reply):
     try:
         conn = psycopg2.connect(
             dbname=DB_NAME,
@@ -124,9 +126,9 @@ def log_interaction(user_id, user_message, gpt_reply):
         cursor = conn.cursor()
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cursor.execute('''
-        INSERT INTO askgbt_logs (user_id, user_message, gpt_reply, timestamp)
-        VALUES (%s, %s, %s, %s)
-        ''', (user_id, user_message, gpt_reply, timestamp))
+        INSERT INTO askgbt_logs (user_id, user_username, user_message, gpt_reply, timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+        ''', (user_id, user_username, user_message, gpt_reply, timestamp))
         conn.commit()
         cursor.close()
         conn.close()
@@ -327,11 +329,13 @@ def handle_video(update: Update, context: CallbackContext) -> None:
             else:
                 update.message.reply_text(user_message)
 
+# Функция обработки сообщений
 def handle_message(update: Update, context: CallbackContext, is_voice=False, is_video=False) -> None:
     if not update.message:
         return
 
     user_id = update.message.from_user.id
+    user_username = update.message.from_user.username  # Получаем имя пользователя
     user_message = extract_text_from_message(update.message)
 
     if is_voice:
@@ -377,8 +381,9 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
     update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
-    # Логирование взаимодействия
-    log_interaction(user_id, user_message, reply)
+
+    # Логирование взаимодействия с учётом имени пользователя
+    log_interaction(user_id, user_username, user_message, reply)
 
 # Основная функция для запуска бота
 def main():
