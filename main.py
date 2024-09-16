@@ -132,7 +132,7 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info("Взаимодействие успешно записано в базу данных")
+        # logger.info("Взаимодействие успешно записано в базу данных")
     except Exception as e:
         logger.error(f"Ошибка при записи в базу данных: {str(e)}")
 
