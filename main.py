@@ -29,7 +29,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 for handler in logger.handlers:
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levellevel)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.INFO)
     handler.setStream(open(os.sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
 
@@ -193,10 +193,6 @@ def add_emojis_at_end(answer: str) -> str:
 
     return f"{answer} {chosen_emojis}"
 
-def escape_markdown(text: str) -> str:
-    """Экранирует специальные символы для Markdown."""
-    return re.sub(r'([_*\[\]()~`>#+-=|{}.!])', r'\\\1', text)
-
 def clean_gpt_response(response: str) -> str:
     """Очищает или заменяет неподдерживаемые символы и корректирует формат."""
     response = response.replace('**', '*')  # Исправление двойных звездочек, если используются
@@ -318,6 +314,11 @@ def handle_message(update: Update, context: CallbackContext, is_voice=False, is_
     except Exception as e:
         logger.error(f"Ошибка при запросе к OpenAI: {str(e)}")
         update.message.reply_text("Извините, произошла ошибка при обработке запроса.")
+
+# Функция старта бота
+def start(update: Update, context: CallbackContext) -> None:
+    """Отправляет приветственное сообщение пользователю, когда он вызывает команду /start"""
+    update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 # Основная функция для запуска бота
 def main():
