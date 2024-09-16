@@ -60,6 +60,7 @@ def add_emojis_at_end(answer: str) -> str:
     return f"{answer} {chosen_emojis}"
 
 # Создание базы данных для логирования
+# Создание базы данных для логирования
 def init_db():
     try:
         conn = psycopg2.connect(
@@ -73,7 +74,7 @@ def init_db():
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS askgbt_logs (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER,
+            user_id BIGINT,
             user_message TEXT,
             gpt_reply TEXT,
             timestamp TIMESTAMP
@@ -82,7 +83,7 @@ def init_db():
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info("Таблица логов успешно создана или уже существует")
+        logger.info("Таблица askgbt_logs успешно создана или уже существует")
     except Exception as e:
         logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
 
