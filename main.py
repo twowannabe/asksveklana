@@ -56,6 +56,14 @@ def get_db_connection():
         port=DB_PORT
     )
 
+def clean_messages(messages: list) -> list:
+    """Очищает сообщения от потенциально нежелательного контента."""
+    cleaned_messages = []
+    for msg in messages:
+        # Здесь можно добавить логику очистки текста, если необходимо
+        cleaned_messages.append(msg)
+    return cleaned_messages
+
 def generate_user_description(messages: list, user_first_name: str) -> str:
     """Генерирует описание пользователя на основе его сообщений."""
     # Объединяем сообщения в один текст
