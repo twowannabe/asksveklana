@@ -47,6 +47,64 @@ initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
 ]
 
+def generate_user_description(messages: list, user_first_name: str) -> str:
+    """Генерирует описание пользователя на основе его сообщений."""
+    # Объединяем сообщения в один текст
+    combined_messages = "\n".join(messages)
+
+    # Формируем сообщения для отправки в ChatGPT
+    chat_messages = [
+        {"role": "system", "content": "Вы - помощник, который анализирует сообщения пользователей и создает их описания. Используйте дружелюбный тон в ответах."},
+        {"role": "user", "content": f"Проанализируй следующие сообщения пользователя и опиши его личность, интересы и стиль общения.\n\nСообщения пользователя:\n{combined_messages}\n\nОписание пользователя {user_first_name}:"}
+    ]
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Или "gpt-3.5-turbo", если у вас нет доступа к GPT-4
+            messages=chat_messages,
+            max_tokens=200,
+            n=1,
+            temperature=0.7,
+        )
+        description = response.choices[0].message['content'].strip()
+        return description
+    except Exception as e:
+        logger.error(f"Ошибка при генерации описания пользователя: {str(e)}")
+        return "Извините, не удалось создать описание."
+
+def get_user_messages(user_id: int, limit=50) -> list:
+    """Получает последние сообщения пользователя из базы данных."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT text FROM messages WHERE user_id = %s ORDER BY date DESC LIMIT %s
+    ''', (user_id, limit))
+
+    messages = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return messages
+
+def describe_user(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    user_first_name = update.message.from_user.first_name
+
+    # Получаем сообщения пользователя из базы данных
+    user_messages = get_user_messages(user_id, limit=50)
+
+    if not user_messages:
+        update.message.reply_text("У вас нет сообщений для анализа.")
+        return
+
+    # Очищаем сообщения
+    user_messages = clean_messages(user_messages)
+
+    # Генерируем описание пользователя на основе его сообщений
+    description = generate_user_description(user_messages, user_first_name)
+
+    # Отправляем описание пользователю
+    update.message.reply_text(description)
+
 def add_emojis_at_end(answer: str) -> str:
     """Добавляет несколько эмодзи в конец ответа."""
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
@@ -393,6 +451,7 @@ def main():
     init_db()
 
     dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("describe_me", describe_user))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
     dispatcher.add_handler(MessageHandler(Filters.video, handle_video))
