@@ -288,6 +288,20 @@ def handle_voice(update: Update, context: CallbackContext) -> None:
             user_message = process_voice_message(voice_message, user_id)
 
             if user_message:
+                # Обрабатываем ответное сообщение, если оно есть
+                if update.message.reply_to_message:
+                    if update.message.reply_to_message.voice:
+                        # Если ответ на голосовое сообщение, обрабатываем его
+                        original_voice_message = update.message.reply_to_message.voice
+                        original_text = process_voice_message(original_voice_message, user_id)
+                        if original_text:
+                            user_message = f"{original_text} {user_message}"
+
+                    elif update.message.reply_to_message.text:
+                        # Если ответ на текстовое сообщение, добавляем его к пользовательскому
+                        original_text = update.message.reply_to_message.text
+                        user_message = f"{original_text} {user_message}"
+
                 # Имитация текстового сообщения, чтобы бот мог ответить как на текстовое сообщение
                 update.message.text = user_message
                 handle_message(update, context, is_voice=True)
