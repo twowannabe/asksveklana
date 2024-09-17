@@ -44,7 +44,7 @@ conversation_context = defaultdict(list)
 
 # Начальная инструкция для ChatGPT
 initial_instructions = [
-    {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты дружелюбная и игривая девушка, использующая эмодзи в конце сообщений. Отвечай на вопросы, используя этот стиль."}
+    {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты отвечаешь кратко и по делу, избегая лишних слов."}
 ]
 
 def get_db_connection():
@@ -216,8 +216,11 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=messages
+            model="gpt-4o-mini",  # Или другой выбранный тобой модельный тип
+            messages=messages,
+            max_tokens=100,  # Ограничиваем максимальное количество токенов для краткости
+            temperature=0.5,  # Низкая температура для краткости и прямоты
+            n=1,
         )
         answer = response.choices[0].message['content'].strip()
         logger.info(f"Ответ ChatGPT: {answer}")
@@ -270,21 +273,24 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
         return False
 
     bot_username = context.bot.username
+    keywords = ["бот", "свеклана", "помоги", "вопрос", "ответь", "почему"]
 
+    # Проверяем наличие упоминания бота
     if message.entities:
         for entity in message.entities:
             if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
                 logger.info(f"Бот упомянут в сообщении: {message.text}")
                 return True
 
-    if message.reply_to_message:
-        if message.reply_to_message.from_user.username == bot_username:
-            logger.info("Сообщение является ответом на сообщение бота")
-            return True
+    # Проверяем, упомянуты ли ключевые слова
+    if any(keyword in message.text.lower() for keyword in keywords):
+        logger.info(f"Сообщение содержит ключевое слово: {message.text}")
+        return True
 
-        if message.reply_to_message.video:
-            logger.info("Сообщение является ответом на видеосообщение")
-            return True
+    # Проверяем, является ли сообщение ответом на сообщение бота
+    if message.reply_to_message and message.reply_to_message.from_user.username == bot_username:
+        logger.info("Сообщение является ответом на сообщение бота")
+        return True
 
     return False
 
