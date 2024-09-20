@@ -273,12 +273,12 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
         return False
 
     bot_username = context.bot.username
-    keywords = ["бот", "свеклана", "помоги", "вопрос", "ответь", "почему"]
+    keywords = ["бот", "свеклана", "помоги", "вопрос", "ответь", "почему", "бот, ты"]
 
     # Проверяем наличие упоминания бота
     if message.entities:
         for entity in message.entities:
-            if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length] == f"@{bot_username}":
+            if entity.type == 'mention' and message.text[entity.offset:entity.offset + entity.length].lower() == f"@{bot_username}".lower():
                 logger.info(f"Бот упомянут в сообщении: {message.text}")
                 return True
 
