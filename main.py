@@ -273,7 +273,8 @@ def should_respond(update: Update, context: CallbackContext) -> bool:
         return False
 
     bot_username = context.bot.username
-    keywords = [ "свеклана", "помоги", "вопрос", "ответь", "почему"]
+    # keywords = [ "свеклана", "помоги", "вопрос", "ответь", "почему"]
+    keywords = [ "свеклана"]
 
     # Проверяем наличие упоминания бота
     if message.entities:
