@@ -1,8 +1,7 @@
 import logging
-import re
 from collections import defaultdict
 from decouple import config
-from telegram import Update
+from telegram import Update, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import openai
 import os
@@ -11,6 +10,7 @@ from datetime import datetime
 import requests
 from io import BytesIO
 import random
+from telegram.utils.helpers import escape_markdown
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -121,10 +121,14 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
 def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
+        # Добавляем системное сообщение для форматирования и длины ответа
+        messages_with_formatting = [
+            {"role": "system", "content": "Отвечай, используя Markdown-разметку для форматирования текста (жирный, курсив и т.д.), но не используй код или ссылки. Пожалуйста, делай ответы краткими и не более 3500 символов."}
+        ] + messages
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",  # Обновлено на корректное название модели
-            messages=messages,
-            max_tokens=500,  # Увеличено значение max_tokens
+            model="gpt-3.5-turbo",
+            messages=messages_with_formatting,
+            max_tokens=700,  # Уменьшено значение max_tokens
             temperature=0.5,
             n=1,
         )
@@ -136,7 +140,9 @@ def ask_chatgpt(messages) -> str:
         # Проверка на максимальную длину сообщения в Telegram
         max_length = 4096
         if len(answer) > max_length:
-            answer = answer[:max_length - 3] + '...'
+            # Обрезаем по последнему пробелу перед ограничением
+            answer = answer[:max_length]
+            answer = answer.rsplit(' ', 1)[0] + '...'
 
         return answer
     except Exception as e:
@@ -228,8 +234,11 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Отправляем сообщение
-    update.message.reply_text(reply)
+    # Экранируем специальные символы для Markdown V2
+    escaped_reply = escape_markdown(reply, version=2)
+
+    # Отправляем сообщение с указанием parse_mode
+    update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
     log_interaction(user_id, user_username, user_message, reply)
 
