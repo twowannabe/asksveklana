@@ -151,7 +151,7 @@ def generate_image(prompt: str) -> str:
         logger.info(f"Получена ссылка на изображение: {image_url}")
         return image_url
     except Exception as e:
-        error_msg = f"Ошибка при создании изображения: {str(e)}")
+        error_msg = f"Ошибка при создании изображения: {str(e)}"
         logger.error(error_msg)
         return error_msg
 
