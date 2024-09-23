@@ -203,6 +203,9 @@ def is_bot_enabled(chat_id: int) -> bool:
 
 # Обработка текстовых сообщений
 def handle_message(update: Update, context: CallbackContext) -> None:
+    if update.message is None:
+        return  # Игнорируем обновления без сообщения
+
     chat_id = update.message.chat.id
 
     if not is_bot_enabled(chat_id):
@@ -226,12 +229,15 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     # Преобразование Markdown в HTML
     html_reply = markdown.markdown(reply)
 
-    # Очистка HTML от неразрешённых тегов
-    allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'strong', 'em', 'ins', 'strike', 'br', 'p', 'ul', 'ol', 'li']
+    # Удаление неподдерживаемых тегов и обработка <p>
+    allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a']
+
     soup = BeautifulSoup(html_reply, 'html.parser')
     for tag in soup.find_all():
-        if tag.name not in allowed_tags:
-            tag.unwrap()
+        if tag.name == 'p':
+            tag.replace_with(f'{tag.get_text()}\n')  # Заменяем <p> содержимым и переносом строки
+        elif tag.name not in allowed_tags:
+            tag.unwrap()  # Удаляем тег, сохраняя содержимое
 
     clean_html_reply = str(soup)
 
