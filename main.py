@@ -226,23 +226,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Преобразование Markdown в HTML
-    html_reply = markdown.markdown(reply)
-
-    # Удаление неподдерживаемых тегов и обработка <p>
-    allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a']
-
-    soup = BeautifulSoup(html_reply, 'html.parser')
-    for tag in soup.find_all():
-        if tag.name == 'p':
-            tag.replace_with(f'{tag.get_text()}\n')  # Заменяем <p> содержимым и переносом строки
-        elif tag.name not in allowed_tags:
-            tag.unwrap()  # Удаляем тег, сохраняя содержимое
-
-    clean_html_reply = str(soup)
-
-    # Отправляем сообщение с указанием parse_mode
-    update.message.reply_text(clean_html_reply, parse_mode=ParseMode.HTML)
+    # Преобразование Markdown в Markdown V2 (заменяем markdown.markdown на непосредственную отправку в Markdown V2)
+    update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
 
     log_interaction(user_id, user_username, user_message, reply)
 
