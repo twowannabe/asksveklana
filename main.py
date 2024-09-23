@@ -81,7 +81,7 @@ def generate_user_description(messages: list, user_first_name: str) -> str:
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="o1-mini",
             messages=chat_messages,
             max_tokens=200,
             n=1,
