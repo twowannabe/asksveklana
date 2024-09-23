@@ -10,7 +10,6 @@ from datetime import datetime
 import requests
 from io import BytesIO
 import random
-from telegram.utils.helpers import escape_markdown
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -40,7 +39,7 @@ for handler in logger.handlers:
 conversation_context = defaultdict(list)
 
 # Список пользователей, которым разрешено управлять ботом
-ALLOWED_USER_IDS = [6122780749, 530674302, 459816251]  # Добавь сюда ID пользователей, которым разрешено управлять ботом
+ALLOWED_USER_IDS = [6122780749, 530674302]  # Добавьте сюда ID пользователей, которым разрешено управлять ботом
 
 # Словарь для хранения статуса включения бота по chat_id групп
 group_status = defaultdict(bool)
@@ -72,13 +71,7 @@ def add_emojis_at_end(answer: str) -> str:
 
 def init_db():
     try:
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS askgbt_logs (
@@ -99,13 +92,7 @@ def init_db():
 
 def log_interaction(user_id, user_username, user_message, gpt_reply):
     try:
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
+        conn = get_db_connection()
         cursor = conn.cursor()
         timestamp = datetime.now()
         cursor.execute('''
@@ -123,12 +110,12 @@ def ask_chatgpt(messages) -> str:
     try:
         # Добавляем системное сообщение для форматирования и длины ответа
         messages_with_formatting = [
-            {"role": "system", "content": "Отвечай, используя Markdown-разметку для форматирования текста (жирный, курсив и т.д.), но не используй код или ссылки. Пожалуйста, делай ответы краткими и не более 3500 символов."}
+            {"role": "system", "content": "Отвечай, используя HTML-разметку для форматирования текста (жирный, курсив и т.д.), но не используй другие HTML-теги, кроме <b>, <i>, <u>, <s>, <code>, <pre>. Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages_with_formatting,
-            max_tokens=700,  # Уменьшено значение max_tokens
+            max_tokens=700,  # Регулируйте значение при необходимости
             temperature=0.5,
             n=1,
         )
@@ -173,7 +160,7 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         image.name = 'image.png'
         update.message.reply_photo(photo=image)
     except Exception as e:
-        error_msg = f"Ошибка при отправке изображения: {str(e)}"
+        error_msg = f"Ошибка при отправке изображения: {str(e)}")
         logger.error(error_msg)
         update.message.reply_text(error_msg)
 
@@ -234,11 +221,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Экранируем специальные символы для Markdown V2
-    escaped_reply = escape_markdown(reply, version=2)
-
     # Отправляем сообщение с указанием parse_mode
-    update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+    update.message.reply_text(reply, parse_mode=ParseMode.HTML)
 
     log_interaction(user_id, user_username, user_message, reply)
 
