@@ -41,7 +41,7 @@ for handler in logger.handlers:
 conversation_context = defaultdict(list)
 
 # Список пользователей, которым разрешено управлять ботом
-ALLOWED_USER_IDS = [6122780749, 530674302]  # Добавьте сюда ID пользователей, которым разрешено управлять ботом
+ALLOWED_USER_IDS = [6122780749, 530674302, 459816251]  # Добавьте сюда ID пользователей, которым разрешено управлять ботом
 
 # Словарь для хранения статуса включения бота по chat_id групп
 group_status = defaultdict(bool)
@@ -115,7 +115,7 @@ def ask_chatgpt(messages) -> str:
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=messages_with_formatting,
             max_tokens=700,  # Регулируйте значение при необходимости
             temperature=0.5,
