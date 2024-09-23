@@ -43,7 +43,7 @@ for handler in logger.handlers:
 conversation_context = defaultdict(list)
 
 # Список пользователей, которым разрешено управлять ботом
-ALLOWED_USER_IDS = [6122780749, 530674302]  # Добавь сюда ID пользователей, которым разрешено управлять ботом
+ALLOWED_USER_IDS = [12345678, 87654321]  # Добавь сюда ID пользователей, которым разрешено управлять ботом
 
 # Словарь для хранения статуса включения бота по chat_id групп
 group_status = defaultdict(bool)
@@ -81,7 +81,7 @@ def generate_user_description(messages: list, user_first_name: str) -> str:
 
     try:
         response = openai.ChatCompletion.create(
-            model="o1-mini",
+            model="gpt-4",
             messages=chat_messages,
             max_tokens=200,
             n=1,
@@ -227,6 +227,11 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         error_msg = f"Ошибка при отправке изображения: {str(e)}"
         logger.error(error_msg)
         update.message.reply_text(error_msg)
+
+# Функция старта бота
+def start(update: Update, context: CallbackContext) -> None:
+    """Приветственное сообщение при запуске бота."""
+    update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 # Проверка, является ли пользователь разрешённым
 def is_user_allowed(user_id: int) -> bool:
