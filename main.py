@@ -43,7 +43,7 @@ for handler in logger.handlers:
 conversation_context = defaultdict(list)
 
 # Список пользователей, которым разрешено управлять ботом
-ALLOWED_USER_IDS = [12345678, 87654321]  # Добавь сюда ID пользователей, которым разрешено управлять ботом
+ALLOWED_USER_IDS = [6122780749, 530674302]  # Добавь сюда ID пользователей, которым разрешено управлять ботом
 
 # Словарь для хранения статуса включения бота по chat_id групп
 group_status = defaultdict(bool)
