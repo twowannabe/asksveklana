@@ -10,6 +10,8 @@ from datetime import datetime
 import requests
 from io import BytesIO
 import random
+import markdown
+from bs4 import BeautifulSoup
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -108,9 +110,9 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
 def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
-        # Добавляем системное сообщение для форматирования и длины ответа
+        # Добавляем системное сообщение для контроля длины ответа
         messages_with_formatting = [
-            {"role": "system", "content": "Отвечай, используя HTML-разметку для форматирования текста (жирный, курсив и т.д.), но не используй другие HTML-теги, кроме <b>, <i>, <u>, <s>, <code>, <pre>. Пожалуйста, делай ответы краткими и не более 3500 символов."}
+            {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -149,7 +151,7 @@ def generate_image(prompt: str) -> str:
         logger.info(f"Получена ссылка на изображение: {image_url}")
         return image_url
     except Exception as e:
-        error_msg = f"Ошибка при создании изображения: {str(e)}"
+        error_msg = f"Ошибка при создании изображения: {str(e)}")
         logger.error(error_msg)
         return error_msg
 
@@ -221,8 +223,20 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
+    # Преобразование Markdown в HTML
+    html_reply = markdown.markdown(reply)
+
+    # Очистка HTML от неразрешённых тегов
+    allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'strong', 'em', 'ins', 'strike', 'br', 'p', 'ul', 'ol', 'li']
+    soup = BeautifulSoup(html_reply, 'html.parser')
+    for tag in soup.find_all():
+        if tag.name not in allowed_tags:
+            tag.unwrap()
+
+    clean_html_reply = str(soup)
+
     # Отправляем сообщение с указанием parse_mode
-    update.message.reply_text(reply, parse_mode=ParseMode.HTML)
+    update.message.reply_text(clean_html_reply, parse_mode=ParseMode.HTML)
 
     log_interaction(user_id, user_username, user_message, reply)
 
