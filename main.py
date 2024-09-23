@@ -12,6 +12,7 @@ from io import BytesIO
 import random
 import markdown
 from bs4 import BeautifulSoup
+import re
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -50,6 +51,10 @@ group_status = defaultdict(bool)
 initial_instructions = [
     {"role": "system", "content": "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."}
 ]
+
+def escape_markdown(text: str) -> str:
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -226,8 +231,10 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Преобразование Markdown в Markdown V2 (заменяем markdown.markdown на непосредственную отправку в Markdown V2)
-    update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
+    # Escape special characters for Markdown V2
+    escaped_reply = escape_markdown(reply)
+
+    update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
     log_interaction(user_id, user_username, user_message, reply)
 
