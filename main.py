@@ -160,7 +160,7 @@ def send_image(update: Update, context: CallbackContext, image_url: str) -> None
         image.name = 'image.png'
         update.message.reply_photo(photo=image)
     except Exception as e:
-        error_msg = f"Ошибка при отправке изображения: {str(e)}")
+        error_msg = f"Ошибка при отправке изображения: {str(e)}"
         logger.error(error_msg)
         update.message.reply_text(error_msg)
 
