@@ -184,7 +184,7 @@ def ask_chatgpt(messages) -> str:
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="o1-mini",
             messages=messages,
             max_tokens=100,
             temperature=0.5,
