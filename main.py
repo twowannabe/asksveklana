@@ -11,7 +11,8 @@ from decouple import config
 import openai
 import psycopg2
 from bs4 import BeautifulSoup
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
