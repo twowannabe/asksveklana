@@ -26,7 +26,6 @@ from telegram.helpers import escape_markdown
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
-# NEWS_API_KEY is no longer needed
 
 # PostgreSQL database settings
 DB_HOST = config('DB_HOST')
@@ -145,6 +144,12 @@ async def ask_chatgpt(messages) -> str:
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
 
+        # Проверяем сообщения на наличие пустых строк
+        for message in messages_with_formatting:
+            if not message.get("content"):
+                logger.error(f"Empty content in message: {message}")
+                return "Произошла ошибка: одно из сообщений было пустым."
+
         # Используем асинхронный метод OpenAI API
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
@@ -179,105 +184,6 @@ async def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         return error_msg
 
-def generate_image(prompt: str) -> str:
-    """
-    Generates an image based on the user's description using OpenAI's API.
-    """
-    logger.info(f"Requesting image generation with prompt: {prompt}")
-    try:
-        response = openai.Image.create(
-            prompt=prompt,
-            n=1,
-            size="1024x1024"
-        )
-        image_url = response['data'][0]['url']
-        logger.info(f"Received image URL: {image_url}")
-        return image_url
-    except Exception as e:
-        error_msg = f"Ошибка при создании изображения: {str(e)}"
-        logger.error(error_msg)
-        return error_msg
-
-async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_url: str) -> None:
-    """
-    Sends the generated image to the user.
-    """
-    try:
-        response = requests.get(image_url)
-        image = BytesIO(response.content)
-        image.name = 'image.png'
-        await update.message.reply_photo(photo=image)
-    except Exception as e:
-        error_msg = f"Ошибка при отправке изображения: {str(e)}"
-        logger.error(error_msg)
-        await update.message.reply_text(error_msg)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Sends a welcome message when the bot is started.
-    """
-    await update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Sends a message with available commands and instructions.
-    """
-    # Check if the command is directed at this bot in a group chat
-    message_text = update.message.text
-    bot_username = context.bot.username
-
-    if update.message.chat.type != 'private':
-        if not re.match(rf'^/help(@{bot_username})?$', message_text.strip()):
-            return  # Not directed to this bot
-
-    help_text = (
-        "Доступные команды:\n"
-        "/start - Начать общение с ботом\n"
-        "/help - Показать это сообщение помощи\n"
-        "/enable - Включить бота в этой группе (только для администраторов)\n"
-        "/disable - Отключить бота в этой группе (только для администраторов)\n"
-        "/image [запрос] - Сгенерировать изображение по описанию\n"
-        "/reset - Сбросить историю диалога\n"
-        "/set_personality [описание] - Установить личность бота\n"
-        "/news - Получить последние новости\n"
-    )
-    await update.message.reply_text(help_text)
-
-async def is_user_admin(update: Update) -> bool:
-    """
-    Checks if the user is an administrator in the chat.
-    """
-    user_status = await update.effective_chat.get_member(update.effective_user.id)
-    return user_status.status in ['administrator', 'creator']
-
-async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Enables the bot in the group.
-    """
-    chat_id = update.message.chat.id
-    if await is_user_admin(update):
-        group_status[chat_id] = True
-        await update.message.reply_text("Бот включен в этой группе!")
-    else:
-        await update.message.reply_text("Только администратор может выполнять эту команду.")
-
-async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Disables the bot in the group.
-    """
-    chat_id = update.message.chat.id
-    if await is_user_admin(update):
-        group_status[chat_id] = False
-        await update.message.reply_text("Бот отключен в этой группе!")
-    else:
-        await update.message.reply_text("Только администратор может выполнять эту команду.")
-
-def is_bot_enabled(chat_id: int) -> bool:
-    """
-    Checks if the bot is enabled in the given chat.
-    """
-    return group_status.get(chat_id, False)
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
@@ -307,7 +213,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 text_to_process = update.message.reply_to_message.text
             else:
                 # Убираем упоминание бота из сообщения
-                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+                text_to_process = message_text.replace(f'@{bot_username}', '').trim()
         # Если сообщение является ответом на сообщение бота
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
             # Используем текст сообщения пользователя
@@ -321,6 +227,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         # В личных сообщениях используем текст как есть
         text_to_process = message_text
+
+    # Проверка на наличие текста для обработки
+    if not text_to_process:
+        await update.message.reply_text("Похоже, вы отправили пустое сообщение. Пожалуйста, отправьте текст.")
+        logger.error(f"Received empty message from user {user_id}")
+        return
 
     # Ограничение частоты запросов
     current_time = datetime.now()
@@ -342,6 +254,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     conversation_context[user_id] = conversation_context[user_id][-10:]  # Храним последние 10 сообщений
 
     messages = initial_instructions + conversation_context[user_id]
+
+    # Проверка на наличие пустых сообщений перед отправкой в ChatGPT
+    for message in messages:
+        if not message.get("content"):
+            logger.error(f"Empty content in conversation context: {message}")
+            await update.message.reply_text("Произошла ошибка при обработке контекста. Пожалуйста, попробуйте снова.")
+            return
 
     reply = await ask_chatgpt(messages)
 
@@ -365,91 +284,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     log_interaction(user_id, user_username, text_to_process, reply)
     logger.info(f"User ID: {user_id}, Chat ID: {chat_id}, Message ID: {update.message.message_id}")
 
-async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def is_bot_enabled(chat_id: int) -> bool:
     """
-    Generates an image based on the user's description.
+    Checks if the bot is enabled in the given chat.
     """
-    user_input = ' '.join(context.args)
-    if not user_input:
-        await update.message.reply_text("Пожалуйста, укажите описание изображения после команды /image.")
-        return
-    image_url = generate_image(user_input)
-    if image_url.startswith("Ошибка"):
-        await update.message.reply_text(image_url)
-    else:
-        await send_image(update, context, image_url)
-
-async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Resets the conversation history with the user.
-    """
-    user_id = update.message.from_user.id
-    conversation_context[user_id] = []
-    await update.message.reply_text("История диалога сброшена.")
-
-async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Allows the user to set the bot's personality.
-    """
-    personality = ' '.join(context.args)
-    if not personality:
-        await update.message.reply_text("Пожалуйста, укажите желаемую личность бота после команды /set_personality.")
-        return
-
-    user_id = update.message.from_user.id
-    user_personalities[user_id] = personality
-
-    # Save personality to the database
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-        INSERT INTO user_personalities (user_id, personality)
-        VALUES (%s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET personality = %s
-        ''', (user_id, personality, personality))
-        conn.commit()
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Error saving personality to database: {str(e)}")
-
-    await update.message.reply_text(f"Личность бота установлена: {personality}")
-
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles incoming images.
-    """
-    await update.message.reply_text("Спасибо за изображение! Но я пока не умею обрабатывать изображения.")
-
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Retrieves the latest news from the BBC RSS feed and sends it to the user.
-    """
-    try:
-        # Use the BBC News RSS feed
-        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
-        response.raise_for_status()  # Check for request errors
-
-        # Parse the XML content
-        soup = BeautifulSoup(response.content, features='xml')
-        items = soup.findAll('item')[:5]  # Get the first 5 news items
-
-        news_message = "Вот последние новости от BBC:\n\n"
-        for item in items:
-            title = escape_markdown(item.title.text, version=2)
-            link = item.link.text
-            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
-
-        # Send the news message
-        await update.message.reply_text(
-            news_message,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            disable_web_page_preview=True
-        )
-    except Exception as e:
-        logger.error(f"Error retrieving news: {str(e)}")
-        await update.message.reply_text("Произошла ошибка при получении новостей.")
+    return group_status.get(chat_id, False)
 
 def main():
     """
@@ -471,7 +310,6 @@ def main():
 
     # Add message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     # Run the bot
     application.run_polling()
