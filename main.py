@@ -56,6 +56,15 @@ def escape_markdown(text: str) -> str:
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
+def escape_markdown_v2(text: str) -> str:
+    """
+    Экранирование специальных символов для использования с Markdown V2 в Telegram.
+    """
+    # Перечень символов, требующих экранирования в Markdown V2
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    # Экранируем все эти символы, добавляя перед ними обратный слэш
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
 def get_db_connection():
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -231,10 +240,15 @@ def handle_message(update: Update, context: CallbackContext) -> None:
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Escape special characters for Markdown V2
-    escaped_reply = escape_markdown(reply)
+    # Экранируем специальные символы для Markdown V2
+    escaped_reply = escape_markdown_v2(reply)
 
-    update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+    # Отправляем ответ в формате Markdown V2
+    try:
+        update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения: {str(e)}")
+        update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
     log_interaction(user_id, user_username, user_message, reply)
 
