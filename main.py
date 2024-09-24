@@ -194,14 +194,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     Sends a message with available commands and instructions.
     """
-    # Check if the command is directed at this bot in a group chat
-    message_text = update.message.text
-    bot_username = context.bot.username
-
-    if update.message.chat.type != 'private':
-        if not re.match(rf'^/help(@{bot_username})?$', message_text.strip()):
-            return  # Not directed to this bot
-
     help_text = (
         "Доступные команды:\n"
         "/start - Начать общение с ботом\n"
@@ -249,6 +241,90 @@ def is_bot_enabled(chat_id: int) -> bool:
     Checks if the bot is enabled in the given chat.
     """
     return group_status.get(chat_id, False)
+
+def generate_image(prompt: str) -> str:
+    """
+    Generates an image based on the user's description using OpenAI's API.
+    """
+    logger.info(f"Requesting image generation with prompt: {prompt}")
+    try:
+        response = openai.Image.create(
+            prompt=prompt,
+            n=1,
+            size="1024x1024"
+        )
+        image_url = response['data'][0]['url']
+        logger.info(f"Received image URL: {image_url}")
+        return image_url
+    except Exception as e:
+        error_msg = f"Ошибка при создании изображения: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+
+async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_url: str) -> None:
+    """
+    Sends the generated image to the user.
+    """
+    try:
+        response = requests.get(image_url)
+        image = BytesIO(response.content)
+        image.name = 'image.png'
+        await update.message.reply_photo(photo=image)
+    except Exception as e:
+        error_msg = f"Ошибка при отправке изображения: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(error_msg)
+
+async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Generates an image based on the user's description.
+    """
+    user_input = ' '.join(context.args)
+    if not user_input:
+        await update.message.reply_text("Пожалуйста, укажите описание изображения после команды /image.")
+        return
+    image_url = generate_image(user_input)
+    if image_url.startswith("Ошибка"):
+        await update.message.reply_text(image_url)
+    else:
+        await send_image(update, context, image_url)
+
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Resets the conversation history with the user.
+    """
+    user_id = update.message.from_user.id
+    conversation_context[user_id] = []
+    await update.message.reply_text("История диалога сброшена.")
+
+async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Allows the user to set the bot's personality.
+    """
+    personality = ' '.join(context.args)
+    if not personality:
+        await update.message.reply_text("Пожалуйста, укажите желаемую личность бота после команды /set_personality.")
+        return
+
+    user_id = update.message.from_user.id
+    user_personalities[user_id] = personality
+
+    # Save personality to the database
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+        INSERT INTO user_personalities (user_id, personality)
+        VALUES (%s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET personality = %s
+        ''', (user_id, personality, personality))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error saving personality to database: {str(e)}")
+
+    await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -349,6 +425,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     log_interaction(user_id, user_username, text_to_process, reply)
     logger.info(f"User ID: {user_id}, Chat ID: {chat_id}, Message ID: {update.message.message_id}")
+
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Retrieves the latest news from the BBC RSS feed and sends it to the user.
+    """
+    try:
+        # Use the BBC News RSS feed
+        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
+        response.raise_for_status()  # Check for request errors
+
+        # Parse the XML content
+        soup = BeautifulSoup(response.content, features='xml')
+        items = soup.findAll('item')[:5]  # Get the first 5 news items
+
+        news_message = "Вот последние новости от BBC:\n\n"
+        for item in items:
+            title = escape_markdown(item.title.text, version=2)
+            link = item.link.text
+            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
+
+        # Send the news message
+        await update.message.reply_text(
+            news_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving news: {str(e)}")
+        await update.message.reply_text("Произошла ошибка при получении новостей.")
 
 def main():
     """
