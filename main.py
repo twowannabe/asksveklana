@@ -7,7 +7,7 @@ import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
-
+from telegram.helpers import escape_markdown
 from decouple import config
 import openai
 import psycopg2
@@ -404,9 +404,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Произошла ошибка при обработке контекста. Пожалуйста, попробуйте снова.")
             return
 
+# Генерируем ответ
     reply = await ask_chatgpt(messages)
-
-    conversation_context[user_id].append({"role": "assistant", "content": reply})
 
     # Экранируем специальные символы для Markdown V2
     escaped_reply = escape_markdown(reply, version=2)
@@ -422,9 +421,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Ошибка при отправке сообщения: {str(e)}")
         await update.message.reply_text("Произошла ошибка при отправке сообщения.")
-
-    log_interaction(user_id, user_username, text_to_process, reply)
-    logger.info(f"User ID: {user_id}, Chat ID: {chat_id}, Message ID: {update.message.message_id}")
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
