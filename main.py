@@ -21,7 +21,6 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from telegram.helpers import escape_markdown
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -327,9 +326,6 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
-    """
     if update.message is None:
         return
 
@@ -404,7 +400,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Произошла ошибка при обработке контекста. Пожалуйста, попробуйте снова.")
             return
 
-# Генерируем ответ
+    # Генерируем ответ
     reply = await ask_chatgpt(messages)
 
     # Экранируем специальные символы для Markdown V2
