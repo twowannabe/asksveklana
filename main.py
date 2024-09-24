@@ -136,30 +136,30 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
 
 async def ask_chatgpt(messages) -> str:
     """
-    Sends messages to OpenAI ChatGPT and returns the assistant's reply.
+    Отправляет сообщения в OpenAI ChatGPT и возвращает ответ.
     """
-    logger.info(f"Sending messages to ChatGPT: {messages}")
+    logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
-        # Add system message to control response length
+        # Добавляем системное сообщение для контроля длины ответа
         messages_with_formatting = [
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
 
-        # Perform blocking OpenAI API call in a separate thread
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, openai.ChatCompletion.create,
-                                              model="gpt-3.5-turbo",
-                                              messages=messages_with_formatting,
-                                              max_tokens=700,
-                                              temperature=0.5,
-                                              n=1)
+        # Используем асинхронный метод OpenAI API
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=messages_with_formatting,
+            max_tokens=700,
+            temperature=0.5,
+            n=1
+        )
 
         answer = response.choices[0].message['content'].strip()
-        logger.info(f"ChatGPT reply: {answer}")
+        logger.info(f"Ответ ChatGPT: {answer}")
 
         answer = add_emojis_at_end(answer)
 
-        # Ensure the message does not exceed Telegram's limit
+        # Проверка на максимальную длину сообщения в Telegram
         max_length = 4096
         if len(answer) > max_length:
             answer = answer[:max_length]
@@ -175,7 +175,7 @@ async def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
     except Exception as e:
-        logger.error("Exception occurred", exc_info=True)
+        logger.error("Произошла ошибка при обращении к ChatGPT", exc_info=True)
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         return error_msg
 
