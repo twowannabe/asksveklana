@@ -20,7 +20,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from telegram.utils.helpers import escape_markdown
+from telegram.helpers import escape_markdown
 
 # Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
