@@ -21,6 +21,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+import html
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -433,14 +434,15 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         news_message = "Вот последние новости от BBC:\n\n"
         for item in items:
-            title = escape_markdown(item.title.text, version=2)
+            title = item.title.text
             link = item.link.text
-            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
+            # Используем html.escape для экранирования специальных символов
+            news_message += f"<b>{html.escape(title)}</b>\n<a href=\"{html.escape(link)}\">Читать дальше</a>\n\n"
 
-        # Send the news message
+        # Send the news message with HTML parse mode
         await update.message.reply_text(
             news_message,
-            parse_mode=ParseMode.MARKDOWN_V2,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
     except Exception as e:
