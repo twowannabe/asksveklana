@@ -215,6 +215,41 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
     await update.message.reply_text(help_text)
 
+async def is_user_admin(update: Update) -> bool:
+    """
+    Checks if the user is an administrator in the chat.
+    """
+    user_status = await update.effective_chat.get_member(update.effective_user.id)
+    return user_status.status in ['administrator', 'creator']
+
+async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Enables the bot in the group.
+    """
+    chat_id = update.message.chat.id
+    if await is_user_admin(update):
+        group_status[chat_id] = True
+        await update.message.reply_text("Бот включен в этой группе!")
+    else:
+        await update.message.reply_text("Только администратор может выполнять эту команду.")
+
+async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Disables the bot in the group.
+    """
+    chat_id = update.message.chat.id
+    if await is_user_admin(update):
+        group_status[chat_id] = False
+        await update.message.reply_text("Бот отключен в этой группе!")
+    else:
+        await update.message.reply_text("Только администратор может выполнять эту команду.")
+
+def is_bot_enabled(chat_id: int) -> bool:
+    """
+    Checks if the bot is enabled in the given chat.
+    """
+    return group_status.get(chat_id, False)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
@@ -314,12 +349,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     log_interaction(user_id, user_username, text_to_process, reply)
     logger.info(f"User ID: {user_id}, Chat ID: {chat_id}, Message ID: {update.message.message_id}")
-
-def is_bot_enabled(chat_id: int) -> bool:
-    """
-    Checks if the bot is enabled in the given chat.
-    """
-    return group_status.get(chat_id, False)
 
 def main():
     """
