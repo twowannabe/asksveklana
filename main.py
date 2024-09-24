@@ -3,6 +3,7 @@ import os
 import random
 import re
 import requests
+import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
@@ -22,70 +23,45 @@ from telegram.ext import (
 )
 from telegram.helpers import escape_markdown
 
-# Загрузка конфигурации из .env файла
+# Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
-NEWS_API_KEY = config('NEWS_API_KEY')  # API ключ для новостного сервиса
+# NEWS_API_KEY is no longer needed
 
-# Настройки подключения к PostgreSQL
+# PostgreSQL database settings
 DB_HOST = config('DB_HOST')
 DB_PORT = config('DB_PORT')
 DB_NAME = config('DB_NAME')
 DB_USER = config('DB_USER')
 DB_PASSWORD = config('DB_PASSWORD')
 
-# Установка ключа API для OpenAI
+# Set API key for OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Логирование с указанием кодировки и подробной информации
+# Configure logging with reduced verbosity for external libraries
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
+    level=logging.INFO,  # Main logger level set to INFO
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
-# Глобальные переменные
-conversation_context = defaultdict(list)  # Контекст бесед
-group_status = defaultdict(bool)  # Статус включения бота в группах
-user_personalities = defaultdict(str)  # Личности бота для пользователей
-user_requests = defaultdict(list)  # Для ограничения скорости запросов
+# Reduce logging level for external libraries
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('telegram').setLevel(logging.WARNING)
 
-# Начальная личность бота
+# Global variables
+conversation_context = defaultdict(list)  # Conversation contexts
+group_status = defaultdict(bool)  # Bot activation status in groups
+user_personalities = defaultdict(str)  # User-specific bot personalities
+user_requests = defaultdict(list)  # For rate limiting
+
+# Default bot personality
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
-
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Получает последние новости из открытых источников и отправляет пользователю.
-    """
-    try:
-        # Используем RSS-ленту BBC News
-        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
-        soup = BeautifulSoup(response.content, features='xml')
-        items = soup.findAll('item')[:5]  # Берем первые 5 новостей
-
-        news_message = "Вот последние новости:\n\n"
-        for item in items:
-            title = escape_markdown(item.title.text, version=2)
-            link = item.link.text
-            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
-
-        await update.message.reply_text(news_message, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
-    except Exception as e:
-        logger.error(f"Ошибка при получении новостей: {str(e)}")
-        await update.message.reply_text("Произошла ошибка при получении новостей.")
-
-def escape_markdown_v2(text: str) -> str:
-    """
-    Экранирование специальных символов для использования с Markdown V2 в Telegram.
-    Исключает '*' и '_', чтобы сохранить форматирование.
-    """
-    escape_chars = r'[]()~`>#+-=|{}.!'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 def get_db_connection():
     """
-    Устанавливает соединение с базой данных PostgreSQL.
+    Establishes a connection to the PostgreSQL database.
     """
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -97,7 +73,7 @@ def get_db_connection():
 
 def add_emojis_at_end(answer: str) -> str:
     """
-    Добавляет случайные эмодзи в конец ответа с некоторой вероятностью.
+    Randomly adds emojis to the end of the assistant's reply.
     """
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
 
@@ -111,7 +87,7 @@ def add_emojis_at_end(answer: str) -> str:
 
 def init_db():
     """
-    Инициализирует базу данных и необходимые таблицы.
+    Initializes the database and necessary tables.
     """
     try:
         conn = get_db_connection()
@@ -126,7 +102,7 @@ def init_db():
             timestamp TIMESTAMP
         )
         ''')
-        # Таблица для хранения личностей пользователей
+        # Table for storing user personalities
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_personalities (
             user_id BIGINT PRIMARY KEY,
@@ -136,13 +112,13 @@ def init_db():
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info("Таблицы базы данных успешно созданы или уже существуют")
+        logger.info("Database tables created or already exist")
     except Exception as e:
-        logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
+        logger.error(f"Error initializing database: {str(e)}")
 
 def log_interaction(user_id, user_username, user_message, gpt_reply):
     """
-    Логирует взаимодействие пользователя с ботом в базу данных.
+    Logs the user's interaction with the bot in the database.
     """
     try:
         conn = get_db_connection()
@@ -156,20 +132,20 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         cursor.close()
         conn.close()
     except Exception as e:
-        logger.error(f"Ошибка при записи в базу данных: {str(e)}")
+        logger.error(f"Error writing to database: {str(e)}")
 
 async def ask_chatgpt(messages) -> str:
     """
-    Отправляет сообщения в OpenAI ChatGPT и возвращает ответ.
+    Sends messages to OpenAI ChatGPT and returns the assistant's reply.
     """
-    logger.info(f"Отправка сообщений в ChatGPT: {messages}")
+    logger.info(f"Sending messages to ChatGPT: {messages}")
     try:
-        # Добавляем системное сообщение для контроля длины ответа
+        # Add system message to control response length
         messages_with_formatting = [
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
 
-        # Выполняем блокирующий вызов OpenAI API в отдельном потоке
+        # Perform blocking OpenAI API call in a separate thread
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, openai.ChatCompletion.create,
                                               model="gpt-3.5-turbo",
@@ -179,11 +155,11 @@ async def ask_chatgpt(messages) -> str:
                                               n=1)
 
         answer = response.choices[0].message['content'].strip()
-        logger.info(f"Ответ ChatGPT: {answer}")
+        logger.info(f"ChatGPT reply: {answer}")
 
         answer = add_emojis_at_end(answer)
 
-        # Проверка на максимальную длину сообщения в Telegram
+        # Ensure the message does not exceed Telegram's limit
         max_length = 4096
         if len(answer) > max_length:
             answer = answer[:max_length]
@@ -199,15 +175,15 @@ async def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
     except Exception as e:
+        logger.error("Exception occurred", exc_info=True)
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
-        logger.error(error_msg)
         return error_msg
 
 def generate_image(prompt: str) -> str:
     """
-    Генерирует изображение на основе описания пользователя с помощью OpenAI API.
+    Generates an image based on the user's description using OpenAI's API.
     """
-    logger.info(f"Отправка запроса на создание изображения с описанием: {prompt}")
+    logger.info(f"Requesting image generation with prompt: {prompt}")
     try:
         response = openai.Image.create(
             prompt=prompt,
@@ -215,7 +191,7 @@ def generate_image(prompt: str) -> str:
             size="1024x1024"
         )
         image_url = response['data'][0]['url']
-        logger.info(f"Получена ссылка на изображение: {image_url}")
+        logger.info(f"Received image URL: {image_url}")
         return image_url
     except Exception as e:
         error_msg = f"Ошибка при создании изображения: {str(e)}"
@@ -224,7 +200,7 @@ def generate_image(prompt: str) -> str:
 
 async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_url: str) -> None:
     """
-    Отправляет сгенерированное изображение пользователю.
+    Sends the generated image to the user.
     """
     try:
         response = requests.get(image_url)
@@ -238,14 +214,22 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_u
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Приветственное сообщение при запуске бота.
+    Sends a welcome message when the bot is started.
     """
     await update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Отправляет сообщение с доступными командами и инструкциями.
+    Sends a message with available commands and instructions.
     """
+    # Check if the command is directed at this bot in a group chat
+    message_text = update.message.text
+    bot_username = context.bot.username
+
+    if update.message.chat.type != 'private':
+        if not re.match(rf'^/help(@{bot_username})?$', message_text.strip()):
+            return  # Not directed to this bot
+
     help_text = (
         "Доступные команды:\n"
         "/start - Начать общение с ботом\n"
@@ -261,14 +245,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def is_user_admin(update: Update) -> bool:
     """
-    Проверяет, является ли пользователь администратором в чате.
+    Checks if the user is an administrator in the chat.
     """
     user_status = await update.effective_chat.get_member(update.effective_user.id)
     return user_status.status in ['administrator', 'creator']
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Включает бота в группе.
+    Enables the bot in the group.
     """
     chat_id = update.message.chat.id
     if await is_user_admin(update):
@@ -279,7 +263,7 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Отключает бота в группе.
+    Disables the bot in the group.
     """
     chat_id = update.message.chat.id
     if await is_user_admin(update):
@@ -290,13 +274,13 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 def is_bot_enabled(chat_id: int) -> bool:
     """
-    Проверяет, включен ли бот в данном чате.
+    Checks if the bot is enabled in the given chat.
     """
     return group_status.get(chat_id, False)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
+    Handles incoming text messages and generates a reply using OpenAI.
     """
     if update.message is None:
         return
@@ -307,15 +291,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = update.message.text.strip()
     bot_username = context.bot.username
 
-    # Проверка на упоминание бота в группе
+    # Check for bot mention in group chats
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
-            return  # Бот отключен в этой группе
+            return  # Bot is disabled in this group
         if f'@{bot_username}' not in message_text:
-            return  # Бот не упомянут
+            return  # Bot is not mentioned
         message_text = message_text.replace(f'@{bot_username}', '').strip()
 
-    # Ограничение скорости запросов (Rate Limiting)
+    # Rate limiting
     current_time = datetime.now()
     user_requests[user_id] = [req_time for req_time in user_requests[user_id] if (current_time - req_time).seconds < 60]
     if len(user_requests[user_id]) >= 5:
@@ -323,13 +307,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     user_requests[user_id].append(current_time)
 
-    # Получение личности бота для пользователя
+    # Get bot personality for the user
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [{"role": "system", "content": personality}]
 
-    # Обновление контекста беседы
+    # Update conversation context
     conversation_context[user_id].append({"role": "user", "content": message_text})
-    conversation_context[user_id] = conversation_context[user_id][-10:]  # Храним последние 10 сообщений
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Keep last 10 messages
 
     messages = initial_instructions + conversation_context[user_id]
 
@@ -337,19 +321,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Экранирование специальных символов для Markdown V2
+    # Escape special characters for Markdown V2
     escaped_reply = escape_markdown(reply, version=2)
 
-    # Проверяем длину сообщения
+    # Ensure the message does not exceed Telegram's limit
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    # Отправляем ответ
+    # Send the reply
     try:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
     except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения: {str(e)}")
+        logger.error(f"Error sending message: {str(e)}")
         await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
     log_interaction(user_id, user_username, message_text, reply)
@@ -357,7 +341,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Генерирует изображение по описанию пользователя.
+    Generates an image based on the user's description.
     """
     user_input = ' '.join(context.args)
     if not user_input:
@@ -371,7 +355,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Сбрасывает историю диалога с пользователем.
+    Resets the conversation history with the user.
     """
     user_id = update.message.from_user.id
     conversation_context[user_id] = []
@@ -379,7 +363,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Позволяет пользователю установить личность бота.
+    Allows the user to set the bot's personality.
     """
     personality = ' '.join(context.args)
     if not personality:
@@ -389,7 +373,7 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = update.message.from_user.id
     user_personalities[user_id] = personality
 
-    # Сохраняем личность в базе данных
+    # Save personality to the database
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -402,50 +386,54 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         cursor.close()
         conn.close()
     except Exception as e:
-        logger.error(f"Ошибка при сохранении личности в базу данных: {str(e)}")
+        logger.error(f"Error saving personality to database: {str(e)}")
 
     await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Обрабатывает входящие изображения.
+    Handles incoming images.
     """
     await update.message.reply_text("Спасибо за изображение! Но я пока не умею обрабатывать изображения.")
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Получает последние новости и отправляет пользователю.
+    Retrieves the latest news from the BBC RSS feed and sends it to the user.
     """
     try:
-        response = requests.get(
-            'https://newsapi.org/v2/top-headlines',
-            params={'country': 'ru', 'apiKey': NEWS_API_KEY}
+        # Use the BBC News RSS feed
+        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
+        response.raise_for_status()  # Check for request errors
+
+        # Parse the XML content
+        soup = BeautifulSoup(response.content, features='xml')
+        items = soup.findAll('item')[:5]  # Get the first 5 news items
+
+        news_message = "Вот последние новости от BBC:\n\n"
+        for item in items:
+            title = escape_markdown(item.title.text, version=2)
+            link = item.link.text
+            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
+
+        # Send the news message
+        await update.message.reply_text(
+            news_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            disable_web_page_preview=True
         )
-        news_data = response.json()
-        if news_data['status'] == 'ok':
-            articles = news_data['articles'][:5]
-            news_message = "Вот последние новости:\n\n"
-            for article in articles:
-                title = escape_markdown(article['title'], version=2)
-                description = escape_markdown(article.get('description', ''), version=2)
-                url = article['url']
-                news_message += f"*{title}*\n{description}\n[Читать дальше]({url})\n\n"
-            await update.message.reply_text(news_message, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
-        else:
-            await update.message.reply_text("Не удалось получить новости.")
     except Exception as e:
-        logger.error(f"Ошибка при получении новостей: {str(e)}")
+        logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
 def main():
     """
-    Запуск бота.
+    Starts the bot.
     """
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     init_db()
 
-    # Добавление обработчиков команд
+    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("enable", enable_bot))
@@ -455,11 +443,11 @@ def main():
     application.add_handler(CommandHandler("set_personality", set_personality))
     application.add_handler(CommandHandler("news", news_command))
 
-    # Обработчики сообщений и фотографий
+    # Add message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    # Запуск бота
+    # Run the bot
     application.run_polling()
 
 if __name__ == '__main__':
