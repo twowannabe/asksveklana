@@ -184,6 +184,12 @@ async def ask_chatgpt(messages) -> str:
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         return error_msg
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Sends a welcome message when the bot is started.
+    """
+    await update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
