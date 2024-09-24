@@ -54,6 +54,27 @@ user_requests = defaultdict(list)  # Для ограничения скорос�
 # Начальная личность бота
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Получает последние новости из открытых источников и отправляет пользователю.
+    """
+    try:
+        # Используем RSS-ленту BBC News
+        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
+        soup = BeautifulSoup(response.content, features='xml')
+        items = soup.findAll('item')[:5]  # Берем первые 5 новостей
+
+        news_message = "Вот последние новости:\n\n"
+        for item in items:
+            title = escape_markdown(item.title.text, version=2)
+            link = item.link.text
+            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
+
+        await update.message.reply_text(news_message, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
+    except Exception as e:
+        logger.error(f"Ошибка при получении новостей: {str(e)}")
+        await update.message.reply_text("Произошла ошибка при получении новостей.")
+
 def escape_markdown_v2(text: str) -> str:
     """
     Экранирование специальных символов для использования с Markdown V2 в Telegram.
