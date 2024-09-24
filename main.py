@@ -243,6 +243,11 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     # Экранируем специальные символы для Markdown V2
     escaped_reply = escape_markdown_v2(reply)
 
+    # Проверяем, что длина сообщения не превышает лимит Telegram
+    max_length = 4096
+    if len(escaped_reply) > max_length:
+        escaped_reply = escaped_reply[:max_length]
+
     # Отправляем ответ в формате Markdown V2
     try:
         update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
