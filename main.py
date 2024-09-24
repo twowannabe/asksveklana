@@ -190,6 +190,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     await update.message.reply_text('Привет! Я - Свеклана, твоя виртуальная подруга. Давай пообщаемся! 😊')
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Sends a message with available commands and instructions.
+    """
+    # Check if the command is directed at this bot in a group chat
+    message_text = update.message.text
+    bot_username = context.bot.username
+
+    if update.message.chat.type != 'private':
+        if not re.match(rf'^/help(@{bot_username})?$', message_text.strip()):
+            return  # Not directed to this bot
+
+    help_text = (
+        "Доступные команды:\n"
+        "/start - Начать общение с ботом\n"
+        "/help - Показать это сообщение помощи\n"
+        "/enable - Включить бота в этой группе (только для администраторов)\n"
+        "/disable - Отключить бота в этой группе (только для администраторов)\n"
+        "/image [запрос] - Сгенерировать изображение по описанию\n"
+        "/reset - Сбросить историю диалога\n"
+        "/set_personality [описание] - Установить личность бота\n"
+        "/news - Получить последние новости\n"
+    )
+    await update.message.reply_text(help_text)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
@@ -219,7 +244,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 text_to_process = update.message.reply_to_message.text
             else:
                 # Убираем упоминание бота из сообщения
-                text_to_process = message_text.replace(f'@{bot_username}', '').trim()
+                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
         # Если сообщение является ответом на сообщение бота
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
             # Используем текст сообщения пользователя
