@@ -291,13 +291,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = update.message.text.strip()
     bot_username = context.bot.username
 
-    # Check for bot mention in group chats
+    # Check for bot mention or reply in group chats
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
             return  # Bot is disabled in this group
-        if f'@{bot_username}' not in message_text:
-            return  # Bot is not mentioned
-        message_text = message_text.replace(f'@{bot_username}', '').strip()
+
+        # Condition if the bot is mentioned
+        if f'@{bot_username}' in message_text:
+            message_text = message_text.replace(f'@{bot_username}', '').strip()
+        # Condition if the message is a reply to the bot's message
+        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
+            pass  # Proceed without modifying message_text
+        else:
+            return  # Bot is neither mentioned nor replied to
 
     # Rate limiting
     current_time = datetime.now()
