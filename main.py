@@ -280,7 +280,7 @@ def is_bot_enabled(chat_id: int) -> bool:
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handles incoming text messages and generates a reply using OpenAI.
+    Обрабатывает входящие текстовые сообщения и генерирует ответ с помощью OpenAI.
     """
     if update.message is None:
         return
@@ -291,35 +291,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = update.message.text.strip()
     bot_username = context.bot.username
 
-    # Check for bot mention or reply in group chats
+    # Переменная для хранения текста, который бот должен обработать
+    text_to_process = message_text
+
+    # Проверяем условия в групповых чатах
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
-            return  # Bot is disabled in this group
+            return  # Бот отключен в этой группе
 
-        # Condition if the bot is mentioned
+        # Если бот упомянут по никнейму
         if f'@{bot_username}' in message_text:
-            message_text = message_text.replace(f'@{bot_username}', '').strip()
-        # Condition if the message is a reply to the bot's message
+            # Если это ответ на другое сообщение
+            if update.message.reply_to_message:
+                # Используем текст сообщения, на которое был ответ
+                text_to_process = update.message.reply_to_message.text
+            else:
+                # Убираем упоминание бота из сообщения
+                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+        # Если сообщение является ответом на сообщение бота
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-            pass  # Proceed without modifying message_text
+            # Используем текст сообщения пользователя
+            text_to_process = message_text
+        # Если сообщение является ответом на другое сообщение и содержит упоминание бота
+        elif update.message.reply_to_message and f'@{bot_username}' in message_text:
+            # Используем текст сообщения, на которое был ответ
+            text_to_process = update.message.reply_to_message.text
         else:
-            return  # Bot is neither mentioned nor replied to
+            return  # Бот не должен реагировать на это сообщение
+    else:
+        # В личных сообщениях используем текст как есть
+        text_to_process = message_text
 
-    # Rate limiting
+    # Ограничение частоты запросов
     current_time = datetime.now()
-    user_requests[user_id] = [req_time for req_time in user_requests[user_id] if (current_time - req_time).seconds < 60]
+    user_requests[user_id] = [
+        req_time for req_time in user_requests[user_id]
+        if (current_time - req_time).seconds < 60
+    ]
     if len(user_requests[user_id]) >= 5:
         await update.message.reply_text("Вы слишком часто отправляете запросы. Пожалуйста, подождите немного.")
         return
     user_requests[user_id].append(current_time)
 
-    # Get bot personality for the user
+    # Получаем личность бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [{"role": "system", "content": personality}]
 
-    # Update conversation context
-    conversation_context[user_id].append({"role": "user", "content": message_text})
-    conversation_context[user_id] = conversation_context[user_id][-10:]  # Keep last 10 messages
+    # Обновляем контекст разговора
+    conversation_context[user_id].append({"role": "user", "content": text_to_process})
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Храним последние 10 сообщений
 
     messages = initial_instructions + conversation_context[user_id]
 
@@ -327,22 +347,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     conversation_context[user_id].append({"role": "assistant", "content": reply})
 
-    # Escape special characters for Markdown V2
+    # Экранируем специальные символы для Markdown V2
     escaped_reply = escape_markdown(reply, version=2)
 
-    # Ensure the message does not exceed Telegram's limit
+    # Проверяем, что сообщение не превышает лимит Telegram
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    # Send the reply
+    # Отправляем ответ
     try:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
     except Exception as e:
-        logger.error(f"Error sending message: {str(e)}")
+        logger.error(f"Ошибка при отправке сообщения: {str(e)}")
         await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
-    log_interaction(user_id, user_username, message_text, reply)
+    log_interaction(user_id, user_username, text_to_process, reply)
     logger.info(f"User ID: {user_id}, Chat ID: {chat_id}, Message ID: {update.message.message_id}")
 
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
