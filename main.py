@@ -203,6 +203,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Определение условия для ответа
     should_respond = False
     reply_to_message_id = None
+    message_to_reply = None
 
     if update.message.chat.type != 'private':  # Если сообщение в группе
         # Проверка, что бот активен в данном чате
@@ -210,16 +211,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.info(f"Бот отключен в чате {chat_id}")
             return
 
-        # Условие 1: Сообщение содержит тег бота
-        if f'@{bot_username}' in message_text:
+        # Условие 1: Сообщение содержит тег бота и это ответ на другое сообщение
+        if f'@{bot_username}' in message_text and update.message.reply_to_message:
             should_respond = True
 
-            # Если это ответ на другое сообщение, прочитать сообщение, на которое ссылаются
-            if update.message.reply_to_message and update.message.reply_to_message.text:
-                text_to_process = update.message.reply_to_message.text
-                reply_to_message_id = update.message.reply_to_message.message_id
-            else:
-                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+            # Сообщение, на которое отвечает пользователь-1
+            message_to_reply = update.message.reply_to_message
+            text_to_process = message_to_reply.text  # Используем текст сообщения пользователя-2
+            reply_to_message_id = message_to_reply.message_id
 
         # Условие 2: Сообщение — это ответ на сообщение бота
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
