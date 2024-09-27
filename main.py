@@ -11,54 +11,56 @@ from decouple import config
 import openai
 import psycopg2
 from bs4 import BeautifulSoup
-from telegram import Update, ParseMode  # Добавлены необходимые импорты
+from telegram import Update
+from telegram.constants import ParseMode  # Исправленный импорт
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     filters,
-    ContextTypes  # Добавлены необходимые импорты
+    ContextTypes
 )
+from telegram.helpers import escape_markdown  # Добавлен импорт escape_markdown
 import html
 
-# Load configuration from .env file
+# Загрузка конфигурации из .env файла
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
 
-# PostgreSQL database settings
+# Настройки базы данных PostgreSQL
 DB_HOST = config('DB_HOST')
 DB_PORT = config('DB_PORT')
 DB_NAME = config('DB_NAME')
 DB_USER = config('DB_USER')
 DB_PASSWORD = config('DB_PASSWORD')
 
-# Set API key for OpenAI
+# Установка API ключа для OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Configure logging with reduced verbosity for external libraries
+# Настройка логирования с уменьшенной детализацией для внешних библиотек
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,  # Main logger level set to INFO
+    level=logging.INFO,  # Уровень основного логгера установлен на INFO
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
-# Reduce logging level for external libraries
+# Уменьшение уровня логирования для внешних библиотек
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('telegram').setLevel(logging.WARNING)
 
-# Global variables
-conversation_context = defaultdict(list)  # Conversation contexts
-group_status = defaultdict(bool)  # Bot activation status in groups
-user_personalities = defaultdict(str)  # User-specific bot personalities
-user_requests = defaultdict(list)  # For rate limiting
+# Глобальные переменные
+conversation_context = defaultdict(list)  # Контексты разговоров
+group_status = defaultdict(bool)  # Статус активации бота в группах
+user_personalities = defaultdict(str)  # Персоналии бота для пользователей
+user_requests = defaultdict(list)  # Для ограничения частоты запросов
 
-# Default bot personality
+# Персональность бота по умолчанию
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
 def get_db_connection():
     """
-    Establishes a connection to the PostgreSQL database.
+    Устанавливает соединение с базой данных PostgreSQL.
     """
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -70,7 +72,7 @@ def get_db_connection():
 
 def add_emojis_at_end(answer: str) -> str:
     """
-    Randomly adds emojis to the end of the assistant's reply.
+    Случайным образом добавляет эмодзи в конец ответа ассистента.
     """
     emojis = ['😊', '😉', '😄', '🎉', '✨', '👍', '😂', '😍', '😎', '🤔', '🥳', '😇', '🙌', '🌟']
 
@@ -84,7 +86,7 @@ def add_emojis_at_end(answer: str) -> str:
 
 def init_db():
     """
-    Initializes the database and necessary tables.
+    Инициализирует базу данных и необходимые таблицы.
     """
     try:
         conn = get_db_connection()
@@ -99,7 +101,7 @@ def init_db():
             timestamp TIMESTAMP
         )
         ''')
-        # Table for storing user personalities
+        # Таблица для хранения персоналий пользователей
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_personalities (
             user_id BIGINT PRIMARY KEY,
@@ -109,17 +111,17 @@ def init_db():
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info("Database tables created or already exist")
+        logger.info("Таблицы базы данных созданы или уже существуют")
     except Exception as e:
-        logger.error(f"Error initializing database: {str(e)}")
+        logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
 
 async def ask_chatgpt(messages) -> str:
     """
-    Sends messages to OpenAI ChatGPT and returns the reply.
+    Отправляет сообщения в OpenAI ChatGPT и возвращает ответ.
     """
     logger.info(f"Отправка сообщений в ChatGPT: {messages}")
     try:
-        # Add a system message to control the response length
+        # Добавление системного сообщения для контроля длины ответа
         messages_with_formatting = [
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
@@ -141,9 +143,9 @@ async def ask_chatgpt(messages) -> str:
         return f"Ошибка при обращении к ChatGPT: {str(e)}"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Check if the message is text only
+    # Проверка, что сообщение текстовое
     if update.message is None or update.message.text is None:
-        logger.info("Received a non-text message, ignoring it.")
+        logger.info("Получено не текстовое сообщение, игнорируем его.")
         return
 
     chat_id = update.message.chat.id
@@ -152,16 +154,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = update.message.text.strip()
     bot_username = context.bot.username
 
-    logger.info(f"Received text message from user {user_id} in chat {chat_id}: {message_text}")
+    logger.info(f"Получено текстовое сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
 
     text_to_process = message_text
 
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
-            logger.info(f"Bot is disabled in chat {chat_id}")
+            logger.info(f"Бот отключен в чате {chat_id}")
             return
 
-        # Handle forwarded messages
+        # Обработка пересланных сообщений
         if update.message.forward_date:
             text_to_process = update.message.text
 
@@ -186,7 +188,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Похоже, вы отправили пустое сообщение. Пожалуйста, отправьте текст.")
         return
 
-    # Get bot's personality for the user
+    # Получение персональности бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [{"role": "system", "content": personality}]
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
