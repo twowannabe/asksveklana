@@ -182,50 +182,87 @@ def is_bot_enabled(chat_id: int) -> bool:
     return group_status[chat_id]
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    bot_username = context.bot.username
+    bot_id = context.bot.id
 
+    # Проверка наличия текста в сообщении
     if update.message is None or update.message.text is None:
         logger.info("Получено не текстовое сообщение, игнорируем его.")
         return
 
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
+    user_username = update.message.from_user.username
     message_text = update.message.text.strip()
+    bot_username = context.bot.username
 
+    logger.info(f"Получено сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
+
+    # По умолчанию текст для обработки - это текущий текст сообщения
     text_to_process = message_text
 
-    if update.message.chat.type != 'private':
+    # Определение условия для ответа
+    should_respond = False
+    reply_to_message_id = None
+
+    if update.message.chat.type != 'private':  # Если сообщение в группе
+        # Проверка, что бот активен в данном чате
         if not is_bot_enabled(chat_id):
             logger.info(f"Бот отключен в чате {chat_id}")
             return
 
+        # Условие 1: Сообщение содержит тег бота
         if f'@{bot_username}' in message_text:
-            if update.message.reply_to_message:
+            should_respond = True
+
+            # Если это ответ на другое сообщение, прочитать сообщение, на которое ссылаются
+            if update.message.reply_to_message and update.message.reply_to_message.text:
                 text_to_process = update.message.reply_to_message.text
+                reply_to_message_id = update.message.reply_to_message.message_id
             else:
                 text_to_process = message_text.replace(f'@{bot_username}', '').strip()
 
-        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-            text_to_process = message_text
-        else:
-            return
-    else:
+        # Условие 2: Сообщение — это ответ на сообщение бота
+        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
+            should_respond = True
+            text_to_process = message_text  # Текст ответа пользователя
+            reply_to_message_id = update.message.reply_to_message.message_id
+
+    else:  # Если сообщение в личном чате
+        should_respond = True
         text_to_process = message_text
 
-    if not text_to_process:
-        await update.message.reply_text("Пожалуйста, отправьте текст.")
+    # Если бот не должен отвечать, прервать обработку
+    if not should_respond or not text_to_process:
         return
 
+    # Логирование текста для обработки
+    logger.info(f"Текст для обработки: {text_to_process}")
+
+    # Получение персональности бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [{"role": "system", "content": personality}]
-    conversation_context[user_id].append({"role": "user", "content": text_to_process})
-    conversation_context[user_id] = conversation_context[user_id][-10:]
 
+    # Добавление сообщения в контекст разговора
+    conversation_context[user_id].append({"role": "user", "content": text_to_process})
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Ограничение контекста последними 10 сообщениями
+
+    # Формирование сообщений для ChatGPT
     messages = initial_instructions + conversation_context[user_id]
+
+    # Получение ответа от ChatGPT
     reply = await ask_chatgpt(messages)
 
+    # Экранирование текста для Markdown
     escaped_reply = escape_markdown(reply, version=2)
-    await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=update.message.message_id)
+    max_length = 4096
+    if len(escaped_reply) > max_length:
+        escaped_reply = escaped_reply[:max_length]
+
+    # Отправка ответа в чат
+    if reply_to_message_id:
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+    else:
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
