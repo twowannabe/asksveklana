@@ -352,8 +352,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.info(f"Bot is disabled in chat {chat_id}")
             return  # Bot is disabled in this group
 
+        # Handle forwarded messages (пересланные сообщения)
+        if update.message.forward_from_message_id:
+            text_to_process = update.message.text
+            logger.info(f"Processing forwarded message text: {text_to_process}")
+
         # Check if the bot is mentioned by @username
-        if f'@{bot_username}' in message_text:
+        elif f'@{bot_username}' in message_text:
             if update.message.reply_to_message and update.message.reply_to_message.text:
                 text_to_process = update.message.reply_to_message.text
                 logger.info(f"Processing replied message text: {text_to_process}")
@@ -436,6 +441,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Ошибка при отправке сообщения: {str(e)}")
         await update.message.reply_text("Произошла ошибка при отправке сообщения.")
+
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
