@@ -336,33 +336,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     message_text = update.message.text.strip()
     bot_username = context.bot.username
 
+    # Получение ID бота
+    bot_me = await context.bot.get_me()
+    bot_id = bot_me.id
+
+    # Логирование информации о сообщении
+    logger.info(f"Received message from user {user_id} in chat {chat_id}: {message_text}")
+
     # Variable to store the text to be processed by the bot
     text_to_process = message_text
 
     # Check conditions in group chats
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
+            logger.info(f"Bot is disabled in chat {chat_id}")
             return  # Bot is disabled in this group
 
         # Check if the bot is mentioned by @username
         if f'@{bot_username}' in message_text:
-            # If this message is a reply to another message
-            if update.message.reply_to_message:
-                # Use the text of the message being replied to
+            if update.message.reply_to_message and update.message.reply_to_message.text:
                 text_to_process = update.message.reply_to_message.text
+                logger.info(f"Processing replied message text: {text_to_process}")
             else:
-                # Remove the mention of the bot from the message
                 text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+                logger.info(f"Processing direct mention text: {text_to_process}")
 
         # If the message is a reply to a message sent by the bot itself
-        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-            # Use the text of the user's reply
-            text_to_process = update.message.text
+        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
+            if message_text:
+                text_to_process = message_text
+                logger.info(f"Processing reply to bot's message: {text_to_process}")
+            else:
+                await update.message.reply_text("Пожалуйста, отправьте текст вашего сообщения.")
+                logger.warning(f"Empty reply from user {user_id} to bot's message")
+                return
         else:
+            logger.info("Message does not mention the bot or reply to bot's message. Ignoring.")
             return  # The bot should not respond to this message
     else:
         # In personal messages, use the text as is
         text_to_process = message_text
+        logger.info(f"Processing private message: {text_to_process}")
 
     # Check if there's text to process
     if not text_to_process:
@@ -378,6 +392,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     ]
     if len(user_requests[user_id]) >= 5:
         await update.message.reply_text("Вы слишком часто отправляете запросы. Пожалуйста, подождите немного.")
+        logger.warning(f"User {user_id} exceeded rate limit.")
         return
     user_requests[user_id].append(current_time)
 
@@ -401,6 +416,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Generate response
     reply = await ask_chatgpt(messages)
 
+    if not isinstance(reply, str):
+        logger.error("Ответ от ChatGPT не является строкой.")
+        await update.message.reply_text("Произошла ошибка при обработке ответа от ChatGPT.")
+        return
+
     # Escape special characters for Markdown V2
     escaped_reply = escape_markdown(reply, version=2)
 
@@ -412,6 +432,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Send the response
     try:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+        logger.info(f"Sent reply to user {user_id}")
     except Exception as e:
         logger.error(f"Ошибка при отправке сообщения: {str(e)}")
         await update.message.reply_text("Произошла ошибка при отправке сообщения.")
