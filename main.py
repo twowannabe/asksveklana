@@ -70,6 +70,43 @@ def get_db_connection():
         port=DB_PORT
     )
 
+def set_group_status(chat_id: int, status: bool):
+    """
+    Устанавливает статус активации бота для группы в базе данных.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO group_status (chat_id, is_enabled)
+            VALUES (%s, %s)
+            ON CONFLICT (chat_id)
+            DO UPDATE SET is_enabled = EXCLUDED.is_enabled
+        ''', (chat_id, status))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении статуса группы {chat_id}: {str(e)}")
+
+def load_group_statuses():
+    """
+    Загружает статусы групп из базы данных в глобальную переменную group_status.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT chat_id, is_enabled FROM group_status')
+        rows = cursor.fetchall()
+        for row in rows:
+            group_id, status = row
+            group_status[group_id] = status
+        cursor.close()
+        conn.close()
+        logger.info("Статусы групп загружены из базы данных")
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке статусов групп: {str(e)}")
+
 def add_emojis_at_end(answer: str) -> str:
     """
     Случайным образом добавляет эмодзи в конец ответа ассистента.
@@ -108,6 +145,13 @@ def init_db():
             personality TEXT
         )
         ''')
+        # Таблица для хранения статусов групп
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS group_status (
+            chat_id BIGINT PRIMARY KEY,
+            is_enabled BOOLEAN NOT NULL
+        )
+        ''')
         conn.commit()
         cursor.close()
         conn.close()
@@ -142,7 +186,16 @@ async def ask_chatgpt(messages) -> str:
         logger.error("Произошла ошибка при обращении к ChatGPT", exc_info=True)
         return f"Ошибка при обращении к ChatGPT: {str(e)}"
 
+def is_bot_enabled(chat_id: int) -> bool:
+    """
+    Проверяет, активирован ли бот в указанном чате.
+    """
+    return group_status[chat_id]
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Получение ID бота
+    bot_id = context.bot.id
+
     # Проверка, что сообщение текстовое
     if update.message is None or update.message.text is None:
         logger.info("Получено не текстовое сообщение, игнорируем его.")
@@ -205,12 +258,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
+async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    group_status[chat_id] = True
+    set_group_status(chat_id, True)
+    await update.message.reply_text("Бот активирован в этом чате.")
+
+async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    group_status[chat_id] = False
+    set_group_status(chat_id, False)
+    await update.message.reply_text("Бот деактивирован в этом чате.")
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    # Можно добавить уведомление администратору или пользователю
+
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     init_db()
+    load_group_statuses()
 
+    # Обработчики команд
+    application.add_handler(CommandHandler("enable", enable_bot))
+    application.add_handler(CommandHandler("disable", disable_bot))
+
+    # Обработчик сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Обработчик ошибок
+    application.add_error_handler(error_handler)
+
     application.run_polling()
 
 if __name__ == '__main__':
