@@ -343,12 +343,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not is_bot_enabled(chat_id):
             return  # Бот отключен в этой группе
 
+        # Если это ответ на сообщение другого пользователя
+        if update.message.reply_to_message and update.message.reply_to_message.from_user.id != context.bot.id:
+            # Используем текст сообщения, на которое был дан ответ
+            text_to_process = update.message.reply_to_message.text + "\nОтвет пользователя: " + message_text
         # Если бот упомянут по никнейму
-        if f'@{bot_username}' in message_text:
+        elif f'@{bot_username}' in message_text:
             # Если это ответ на другое сообщение
             if update.message.reply_to_message:
-                # Используем текст сообщения, на которое был ответ
-                text_to_process = update.message.reply_to_message.text
+                # Используем текст сообщения, на которое был ответ, и добавляем текущий текст
+                text_to_process = update.message.reply_to_message.text + "\nОтвет пользователя: " + message_text
             else:
                 # Убираем упоминание бота из сообщения
                 text_to_process = message_text.replace(f'@{bot_username}', '').strip()
@@ -356,10 +360,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
             # Используем текст сообщения пользователя
             text_to_process = message_text
-        # Если сообщение является ответом на другое сообщение и содержит упоминание бота
-        elif update.message.reply_to_message and f'@{bot_username}' in message_text:
-            # Используем текст сообщения, на которое был ответ
-            text_to_process = update.message.reply_to_message.text
         else:
             return  # Бот не должен реагировать на это сообщение
     else:
