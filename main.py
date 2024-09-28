@@ -328,7 +328,7 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bot_id = context.bot.id
 
-    # Проверка наличия текста в сообщении
+    # Проверка наличия текста или текста с медиа-контентом
     if update.message is None:
         logger.info("Получено пустое сообщение, игнорируем его.")
         return
@@ -336,18 +336,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
     user_username = update.message.from_user.username
-    message_text = update.message.text.strip() if update.message.text else ""
     bot_username = context.bot.username
 
-    logger.info(f"Получено сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
+    # Проверка на наличие текста или подписи к медиа-контенту
+    message_text = update.message.text.strip() if update.message.text else update.message.caption
+    message_text = message_text.strip() if message_text else ""
 
-    # По умолчанию текст для обработки - это текущий текст сообщения
-    text_to_process = message_text
+    logger.info(f"Получено сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
 
     # Определение условия для ответа
     should_respond = False
     reply_to_message_id = None
-    message_to_reply = None
+    text_to_process = None
 
     if update.message.chat.type != 'private':  # Если сообщение в группе
         # Проверка, что бот активен в данном чате
@@ -362,13 +362,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Сообщение, на которое отвечает пользователь-1
             message_to_reply = update.message.reply_to_message
 
-            # Проверка: сообщение, на которое отвечает пользователь, содержит текст
-            if message_to_reply.text:
-                text_to_process = message_to_reply.text  # Используем текст сообщения пользователя-2
+            # Проверка: сообщение, на которое отвечает пользователь, содержит текст или подпись к медиа
+            reply_message_text = message_to_reply.text or message_to_reply.caption
+            if reply_message_text:
+                text_to_process = reply_message_text.strip()  # Используем текст или подпись из сообщения пользователя-2
                 reply_to_message_id = message_to_reply.message_id
             else:
                 logger.info("Сообщение, на которое отвечают, не содержит текста. Игнорируем.")
-                return  # Прекращаем обработку, если нет текста
+                return  # Прекращаем обработку, если нет текста или подписи
 
         # Условие 2: Сообщение — это ответ на сообщение бота
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
