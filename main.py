@@ -352,29 +352,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reply_to_message_id = None
     text_to_process = None
 
+    # Условие: Бот активен в группе и сообщение содержит его упоминание или это личный чат
     if update.message.chat.type != 'private':  # Если сообщение в группе
-        # Проверка, что бот активен в данном чате
         if not is_bot_enabled(chat_id):
             logger.info(f"Бот отключен в чате {chat_id}. Проверка group_status={group_status}")
             return
 
-        # Условие 1: Сообщение содержит тег бота и это ответ на другое сообщение
-        if f'@{bot_username}' in message_text and update.message.reply_to_message:
+        # Условие 1: Сообщение содержит тег бота или это прямое обращение к боту
+        if f'@{bot_username}' in message_text:
             should_respond = True
 
-            # Сообщение, на которое отвечает пользователь-1
-            message_to_reply = update.message.reply_to_message
+            # Если это ответ на сообщение другого пользователя, используем это сообщение
+            if update.message.reply_to_message:
+                message_to_reply = update.message.reply_to_message
 
-            # Проверка: сообщение, на которое отвечает пользователь, содержит текст или подпись к медиа
-            reply_message_text = message_to_reply.text or message_to_reply.caption
-            if reply_message_text:
-                text_to_process = reply_message_text.strip()  # Используем текст или подпись из сообщения пользователя-2
-                reply_to_message_id = message_to_reply.message_id
+                # Проверка: сообщение, на которое отвечают, содержит текст или подпись к медиа
+                reply_message_text = message_to_reply.text or message_to_reply.caption
+                if reply_message_text:
+                    text_to_process = reply_message_text.strip()
+                    reply_to_message_id = message_to_reply.message_id
+                else:
+                    logger.info("Сообщение, на которое отвечают, не содержит текста. Игнорируем.")
+                    return  # Прекращаем обработку, если нет текста или подписи
             else:
-                logger.info("Сообщение, на которое отвечают, не содержит текста. Игнорируем.")
-                return  # Прекращаем обработку, если нет текста или подписи
+                # Если это не ответ, обрабатываем текст текущего сообщения
+                text_to_process = message_text
 
-        # Условие 2: Сообщение — это ответ на сообщение бота
+        # Условие 2: Сообщение — это ответ на сообщение бота (например, продолжается обсуждение)
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
             should_respond = True
             text_to_process = message_text  # Текст ответа пользователя
@@ -394,7 +398,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Получение персональности бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
-    initial_instructions = [{"role": "system", "content": personality}]
+
+    # Обновление initial_instructions с контекстом
+    initial_instructions = [
+        {"role": "system", "content": personality},
+        {"role": "system", "content": "Пожалуйста, всегда отвечай на вопросы, которые адресованы тебе напрямую, независимо от темы."}
+    ]
 
     # Добавление сообщения в контекст разговора
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
