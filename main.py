@@ -328,7 +328,7 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bot_id = context.bot.id
 
-    # Дополнительный лог для диагностики
+    # Дополнительное логирование для диагностики
     logger.info(f"Получено новое сообщение: {update.message}")
 
     # Проверка наличия текста или текста с медиа-контентом
@@ -404,7 +404,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     messages = initial_instructions + conversation_context[user_id]
 
     # Получение ответа от ChatGPT
-    reply = await ask_chatgpt(messages)
+    try:
+        reply = await ask_chatgpt(messages)
+    except Exception as e:
+        logger.error(f"Ошибка при обращении к OpenAI: {e}")
+        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, повторите запрос.")
+        return
 
     # Экранирование текста для Markdown
     escaped_reply = escape_markdown(reply, version=2)
@@ -417,6 +422,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
     else:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
