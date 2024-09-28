@@ -151,7 +151,7 @@ async def ask_chatgpt(messages) -> str:
 
         # Используем асинхронный метод OpenAI API
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages_with_formatting,
             max_tokens=700,
             temperature=0.5,
