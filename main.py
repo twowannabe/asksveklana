@@ -328,6 +328,9 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bot_id = context.bot.id
 
+    # Дополнительный лог для диагностики
+    logger.info(f"Получено новое сообщение: {update.message}")
+
     # Проверка наличия текста или текста с медиа-контентом
     if update.message is None:
         logger.info("Получено пустое сообщение, игнорируем его.")
@@ -352,7 +355,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.message.chat.type != 'private':  # Если сообщение в группе
         # Проверка, что бот активен в данном чате
         if not is_bot_enabled(chat_id):
-            logger.info(f"Бот отключен в чате {chat_id}")
+            logger.info(f"Бот отключен в чате {chat_id}. Проверка group_status={group_status}")
             return
 
         # Условие 1: Сообщение содержит тег бота и это ответ на другое сообщение
@@ -383,6 +386,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Если бот не должен отвечать или текст для обработки пуст, прервать обработку
     if not should_respond or not text_to_process:
+        logger.info(f"Бот решил не отвечать. should_respond={should_respond}, text_to_process={text_to_process}")
         return
 
     # Логирование текста для обработки
