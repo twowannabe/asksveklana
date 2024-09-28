@@ -326,97 +326,92 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    bot_id = context.bot.id
+
+    # Проверка наличия текста в сообщении
     if update.message is None:
+        logger.info("Получено пустое сообщение, игнорируем его.")
         return
 
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
     user_username = update.message.from_user.username
-    message_text = update.message.text.strip()
+    message_text = update.message.text.strip() if update.message.text else ""
     bot_username = context.bot.username
 
-    # Переменная для хранения текста, который бот должен обработать
+    logger.info(f"Получено сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
+
+    # По умолчанию текст для обработки - это текущий текст сообщения
     text_to_process = message_text
 
-    # Проверяем условия в групповых чатах
-    if update.message.chat.type != 'private':
-        if not is_bot_enabled(chat_id):
-            return  # Бот отключен в этой группе
+    # Определение условия для ответа
+    should_respond = False
+    reply_to_message_id = None
+    message_to_reply = None
 
-        # Если это ответ на сообщение другого пользователя
-        if update.message.reply_to_message and update.message.reply_to_message.from_user.id != context.bot.id:
-            # Используем текст сообщения, на которое был дан ответ
-            text_to_process = update.message.reply_to_message.text + "\nОтвет пользователя: " + message_text
-        # Если бот упомянут по никнейму
-        elif f'@{bot_username}' in message_text:
-            # Если это ответ на другое сообщение
-            if update.message.reply_to_message:
-                # Используем текст сообщения, на которое был ответ, и добавляем текущий текст
-                text_to_process = update.message.reply_to_message.text + "\nОтвет пользователя: " + message_text
+    if update.message.chat.type != 'private':  # Если сообщение в группе
+        # Проверка, что бот активен в данном чате
+        if not is_bot_enabled(chat_id):
+            logger.info(f"Бот отключен в чате {chat_id}")
+            return
+
+        # Условие 1: Сообщение содержит тег бота и это ответ на другое сообщение
+        if f'@{bot_username}' in message_text and update.message.reply_to_message:
+            should_respond = True
+
+            # Сообщение, на которое отвечает пользователь-1
+            message_to_reply = update.message.reply_to_message
+
+            # Проверка: сообщение, на которое отвечает пользователь, содержит текст
+            if message_to_reply.text:
+                text_to_process = message_to_reply.text  # Используем текст сообщения пользователя-2
+                reply_to_message_id = message_to_reply.message_id
             else:
-                # Убираем упоминание бота из сообщения
-                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
-        # Если сообщение является ответом на сообщение бота
-        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id:
-            # Используем текст сообщения пользователя
-            text_to_process = message_text
-        else:
-            return  # Бот не должен реагировать на это сообщение
-    else:
-        # В личных сообщениях используем текст как есть
+                logger.info("Сообщение, на которое отвечают, не содержит текста. Игнорируем.")
+                return  # Прекращаем обработку, если нет текста
+
+        # Условие 2: Сообщение — это ответ на сообщение бота
+        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
+            should_respond = True
+            text_to_process = message_text  # Текст ответа пользователя
+            reply_to_message_id = update.message.reply_to_message.message_id
+
+    else:  # Если сообщение в личном чате
+        should_respond = True
         text_to_process = message_text
 
-    # Проверка на наличие текста для обработки
-    if not text_to_process:
-        await update.message.reply_text("Похоже, вы отправили пустое сообщение. Пожалуйста, отправьте текст.")
-        logger.error(f"Received empty message from user {user_id}")
+    # Если бот не должен отвечать или текст для обработки пуст, прервать обработку
+    if not should_respond or not text_to_process:
         return
 
-    # Ограничение частоты запросов
-    current_time = datetime.now()
-    user_requests[user_id] = [
-        req_time for req_time in user_requests[user_id]
-        if (current_time - req_time).seconds < 60
-    ]
-    if len(user_requests[user_id]) >= 5:
-        await update.message.reply_text("Вы слишком часто отправляете запросы. Пожалуйста, подождите немного.")
-        return
-    user_requests[user_id].append(current_time)
+    # Логирование текста для обработки
+    logger.info(f"Текст для обработки: {text_to_process}")
 
-    # Получаем личность бота для пользователя
+    # Получение персональности бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [{"role": "system", "content": personality}]
 
-    # Обновляем контекст разговора
+    # Добавление сообщения в контекст разговора
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
-    conversation_context[user_id] = conversation_context[user_id][-10:]  # Храним последние 10 сообщений
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Ограничение контекста последними 10 сообщениями
 
+    # Формирование сообщений для ChatGPT
     messages = initial_instructions + conversation_context[user_id]
 
-    # Проверка на наличие пустых сообщений перед отправкой в ChatGPT
-    for message in messages:
-        if not message.get("content"):
-            logger.error(f"Empty content in conversation context: {message}")
-            await update.message.reply_text("Произошла ошибка при обработке контекста. Пожалуйста, попробуйте снова.")
-            return
-
-    # Генерируем ответ
+    # Получение ответа от ChatGPT
     reply = await ask_chatgpt(messages)
 
-    # Экранируем специальные символы для Markdown V2
+    # Экранирование текста для Markdown
     escaped_reply = escape_markdown(reply, version=2)
-
-    # Проверяем, что сообщение не превышает лимит Telegram
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    # Отправляем ответ
-    try:
+    # Отправка ответа в чат
+    if reply_to_message_id:
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+    else:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
-    except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения: {str(e)}")
-        await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
