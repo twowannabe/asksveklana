@@ -83,6 +83,14 @@ def add_emojis_at_end(answer: str) -> str:
 
     return f"{answer} {chosen_emojis}"
 
+def escape_markdown_v2(text):
+    """
+    Экранирует специальные символы MarkdownV2, такие как '.', '(', ')', '[', ']', '_', '*', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'
+    """
+    # Экранируем все специальные символы MarkdownV2
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
 def init_db():
     """
     Initializes the database and necessary tables.
@@ -420,17 +428,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, повторите запрос.")
         return
 
+    # Экранирование специальных символов для MarkdownV2
+    escaped_reply = escape_markdown_v2(reply)
+
     # Проверка на максимальную длину сообщения в Telegram
     max_length = 4096
-    if len(reply) > max_length:
-        reply = reply[:max_length]
+    if len(escaped_reply) > max_length:
+        escaped_reply = escaped_reply[:max_length]
 
-    # Отправка ответа в чат без экранирования или с использованием HTML-парсинга
+    # Отправка ответа в чат
     if reply_to_message_id:
-        await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
     else:
-        await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
+    # Логирование взаимодействия
+    log_interaction(user_id, user_username, text_to_process, reply)
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -447,7 +460,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         news_message = "Вот последние новости от BBC:\n\n"
         for item in items:
-            title = escape_markdown(item.title.text, version=2)
+            title = escape_markdown_v2(item.title.text)
             link = item.link.text
             news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
 
