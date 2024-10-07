@@ -420,17 +420,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, повторите запрос.")
         return
 
-    # Экранирование текста для Markdown
-    escaped_reply = escape_markdown(reply, version=2)
+    # Проверка на максимальную длину сообщения в Telegram
     max_length = 4096
-    if len(escaped_reply) > max_length:
-        escaped_reply = escaped_reply[:max_length]
+    if len(reply) > max_length:
+        reply = reply[:max_length]
 
-    # Отправка ответа в чат
+    # Отправка ответа в чат без экранирования или с использованием HTML-парсинга
     if reply_to_message_id:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+        await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
     else:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
