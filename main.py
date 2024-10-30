@@ -2,18 +2,16 @@ import logging
 import os
 import random
 import re
-import requests
 import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
-from telegram.utils.helpers import escape_markdown
+
 from decouple import config
 import openai
-import psycopg2
+import asyncpg
 from bs4 import BeautifulSoup
-from telegram import Update
-from telegram.constants import ParseMode
+from telegram import Update, ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -21,6 +19,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+import aiohttp
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -57,17 +56,39 @@ user_requests = defaultdict(list)  # For rate limiting
 # Default bot personality
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
-def get_db_connection():
+async def init_db():
     """
-    Establishes a connection to the PostgreSQL database.
+    Initializes the database and necessary tables.
     """
-    return psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
+    try:
+        conn = await asyncpg.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
+        )
+        await conn.execute('''
+        CREATE TABLE IF NOT EXISTS askgbt_logs (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            user_username TEXT,
+            user_message TEXT,
+            gpt_reply TEXT,
+            timestamp TIMESTAMP
+        )
+        ''')
+        # Table for storing user personalities
+        await conn.execute('''
+        CREATE TABLE IF NOT EXISTS user_personalities (
+            user_id BIGINT PRIMARY KEY,
+            personality TEXT
+        )
+        ''')
+        await conn.close()
+        logger.info("Database tables created or already exist")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
 
 def add_emojis_at_end(answer: str) -> str:
     """
@@ -91,52 +112,24 @@ def escape_markdown_v2(text):
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-def init_db():
-    """
-    Initializes the database and necessary tables.
-    """
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS askgbt_logs (
-            id SERIAL PRIMARY KEY,
-            user_id BIGINT,
-            user_username TEXT,
-            user_message TEXT,
-            gpt_reply TEXT,
-            timestamp TIMESTAMP
-        )
-        ''')
-        # Table for storing user personalities
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_personalities (
-            user_id BIGINT PRIMARY KEY,
-            personality TEXT
-        )
-        ''')
-        conn.commit()
-        cursor.close()
-        conn.close()
-        logger.info("Database tables created or already exist")
-    except Exception as e:
-        logger.error(f"Error initializing database: {str(e)}")
-
-def log_interaction(user_id, user_username, user_message, gpt_reply):
+async def log_interaction(user_id, user_username, user_message, gpt_reply):
     """
     Logs the user's interaction with the bot in the database.
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        conn = await asyncpg.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
+        )
         timestamp = datetime.now()
-        cursor.execute('''
+        await conn.execute('''
         INSERT INTO askgbt_logs (user_id, user_username, user_message, gpt_reply, timestamp)
-        VALUES (%s, %s, %s, %s, %s)
-        ''', (user_id, user_username, user_message, gpt_reply, timestamp))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        VALUES ($1, $2, $3, $4, $5)
+        ''', user_id, user_username, user_message, gpt_reply, timestamp)
+        await conn.close()
     except Exception as e:
         logger.error(f"Error writing to database: {str(e)}")
 
@@ -249,13 +242,13 @@ def is_bot_enabled(chat_id: int) -> bool:
     """
     return group_status.get(chat_id, False)
 
-def generate_image(prompt: str) -> str:
+async def generate_image(prompt: str) -> str:
     """
     Generates an image based on the user's description using OpenAI's API.
     """
     logger.info(f"Requesting image generation with prompt: {prompt}")
     try:
-        response = openai.Image.create(
+        response = await openai.Image.acreate(
             prompt=prompt,
             n=1,
             size="1024x1024"
@@ -273,10 +266,16 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_u
     Sends the generated image to the user.
     """
     try:
-        response = requests.get(image_url)
-        image = BytesIO(response.content)
-        image.name = 'image.png'
-        await update.message.reply_photo(photo=image)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url) as resp:
+                if resp.status == 200:
+                    image = BytesIO(await resp.read())
+                    image.name = 'image.png'
+                    await update.message.reply_photo(photo=image)
+                else:
+                    error_msg = f"Ошибка при получении изображения: статус {resp.status}"
+                    logger.error(error_msg)
+                    await update.message.reply_text(error_msg)
     except Exception as e:
         error_msg = f"Ошибка при отправке изображения: {str(e)}"
         logger.error(error_msg)
@@ -290,7 +289,7 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not user_input:
         await update.message.reply_text("Пожалуйста, укажите описание изображения после команды /image.")
         return
-    image_url = generate_image(user_input)
+    image_url = await generate_image(user_input)
     if image_url.startswith("Ошибка"):
         await update.message.reply_text(image_url)
     else:
@@ -318,16 +317,19 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Save personality to the database
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
+        conn = await asyncpg.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
+        )
+        await conn.execute('''
         INSERT INTO user_personalities (user_id, personality)
-        VALUES (%s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET personality = %s
-        ''', (user_id, personality, personality))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        VALUES ($1, $2)
+        ON CONFLICT (user_id) DO UPDATE SET personality = $2
+        ''', user_id, personality)
+        await conn.close()
     except Exception as e:
         logger.error(f"Error saving personality to database: {str(e)}")
 
@@ -384,7 +386,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     return  # Прекращаем обработку, если нет текста или подписи
             else:
                 # Если это не ответ, обрабатываем текст текущего сообщения
-                text_to_process = message_text
+                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
 
         # Условие 2: Сообщение — это ответ на сообщение бота (например, продолжается обсуждение)
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
@@ -443,44 +445,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
     # Логирование взаимодействия
-    log_interaction(user_id, user_username, text_to_process, reply)
+    await log_interaction(user_id, user_username, text_to_process, reply)
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Retrieves the latest news from the BBC RSS feed and sends it to the user.
+    Retrieves the latest news from the Lenta.ru RSS feed and sends it to the user.
     """
     try:
-        # Use the BBC News RSS feed
-        response = requests.get('https://lenta.ru/rss/news')
-        response.raise_for_status()  # Check for request errors
+        async with aiohttp.ClientSession() as session:
+            async with session.get('https://lenta.ru/rss/news') as response:
+                if response.status == 200:
+                    content = await response.text()
+                    soup = BeautifulSoup(content, features='xml')
+                    items = soup.findAll('item')[:5]  # Get the first 5 news items
 
-        # Parse the XML content
-        soup = BeautifulSoup(response.content, features='xml')
-        items = soup.findAll('item')[:5]  # Get the first 5 news items
+                    news_message = "Вот последние новости:\n\n"
+                    for item in items:
+                        title = escape_markdown_v2(item.title.text)
+                        link = item.link.text
+                        news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
 
-        news_message = "Вот последние новости от BBC:\n\n"
-        for item in items:
-            title = escape_markdown_v2(item.title.text)
-            link = item.link.text
-            news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
-
-        # Send the news message
-        await update.message.reply_text(
-            news_message,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            disable_web_page_preview=True
-        )
+                    # Send the news message
+                    await update.message.reply_text(
+                        news_message,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        disable_web_page_preview=True
+                    )
+                else:
+                    await update.message.reply_text("Не удалось получить новости.")
     except Exception as e:
         logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
-def main():
+async def main():
     """
     Starts the bot.
     """
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    init_db()
+    await init_db()
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
@@ -496,8 +499,10 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Run the bot
-    application.run_polling()
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await application.updater.idle()
 
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())
