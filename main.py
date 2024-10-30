@@ -1,8 +1,6 @@
 import logging
-import os
 import random
 import re
-import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
@@ -11,7 +9,8 @@ from decouple import config
 import openai
 import asyncpg
 from bs4 import BeautifulSoup
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode, ChatAction
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -35,23 +34,18 @@ DB_PASSWORD = config('DB_PASSWORD')
 # Set API key for OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Configure logging with reduced verbosity for external libraries
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,  # Main logger level set to INFO
+    level=logging.INFO,
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
-
-# Reduce logging level for external libraries
-logging.getLogger('httpx').setLevel(logging.WARNING)
-logging.getLogger('telegram').setLevel(logging.WARNING)
 
 # Global variables
 conversation_context = defaultdict(list)  # Conversation contexts
 group_status = defaultdict(bool)  # Bot activation status in groups
 user_personalities = defaultdict(str)  # User-specific bot personalities
-user_requests = defaultdict(list)  # For rate limiting
 
 # Default bot personality
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
@@ -106,9 +100,8 @@ def add_emojis_at_end(answer: str) -> str:
 
 def escape_markdown_v2(text):
     """
-    Экранирует специальные символы MarkdownV2, такие как '.', '(', ')', '[', ']', '_', '*', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'
+    Escapes special characters for MarkdownV2 formatting.
     """
-    # Экранируем все специальные символы MarkdownV2
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
@@ -135,24 +128,24 @@ async def log_interaction(user_id, user_username, user_message, gpt_reply):
 
 async def ask_chatgpt(messages) -> str:
     """
-    Отправляет сообщения в OpenAI ChatGPT и возвращает ответ.
+    Sends messages to OpenAI ChatGPT and returns the response.
     """
-    logger.info(f"Отправка сообщений в ChatGPT: {messages}")
+    logger.info(f"Sending messages to ChatGPT: {messages}")
     try:
-        # Добавляем системное сообщение для контроля длины ответа
+        # Add system message to control response length
         messages_with_formatting = [
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
 
-        # Проверяем сообщения на наличие пустых строк
+        # Check messages for empty content
         for message in messages_with_formatting:
             if not message.get("content"):
                 logger.error(f"Empty content in message: {message}")
                 return "Произошла ошибка: одно из сообщений было пустым."
 
-        # Используем асинхронный метод OpenAI API
+        # Use asynchronous OpenAI API
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             messages=messages_with_formatting,
             max_tokens=700,
             temperature=0.2,
@@ -160,11 +153,11 @@ async def ask_chatgpt(messages) -> str:
         )
 
         answer = response.choices[0].message['content'].strip()
-        logger.info(f"Ответ ChatGPT: {answer}")
+        logger.info(f"ChatGPT response: {answer}")
 
         answer = add_emojis_at_end(answer)
 
-        # Проверка на максимальную длину сообщения в Telegram
+        # Ensure the message does not exceed Telegram's maximum length
         max_length = 4096
         if len(answer) > max_length:
             answer = answer[:max_length]
@@ -180,7 +173,7 @@ async def ask_chatgpt(messages) -> str:
         logger.error(error_msg)
         return error_msg
     except Exception as e:
-        logger.error("Произошла ошибка при обращении к ChatGPT", exc_info=True)
+        logger.error("An error occurred while accessing ChatGPT", exc_info=True)
         error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         return error_msg
 
@@ -289,6 +282,9 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not user_input:
         await update.message.reply_text("Пожалуйста, укажите описание изображения после команды /image.")
         return
+
+    await update.message.chat.send_action(action=ChatAction.UPLOAD_PHOTO)
+
     image_url = await generate_image(user_input)
     if image_url.startswith("Ошибка"):
         await update.message.reply_text(image_url)
@@ -338,12 +334,10 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bot_id = context.bot.id
 
-    # Дополнительное логирование для диагностики
-    logger.info(f"Получено новое сообщение: {update.message}")
+    logger.info(f"Received new message: {update.message}")
 
-    # Проверка наличия текста или текста с медиа-контентом
     if update.message is None:
-        logger.info("Получено пустое сообщение, игнорируем его.")
+        logger.info("Received empty message, ignoring.")
         return
 
     chat_id = update.message.chat.id
@@ -351,105 +345,74 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_username = update.message.from_user.username
     bot_username = context.bot.username
 
-    # Проверка на наличие текста или подписи к медиа-контенту
     message_text = update.message.text.strip() if update.message.text else update.message.caption
     message_text = message_text.strip() if message_text else ""
 
-    logger.info(f"Получено сообщение от пользователя {user_id} в чате {chat_id}: {message_text}")
+    logger.info(f"Message from user {user_id} in chat {chat_id}: {message_text}")
 
-    # Определение условия для ответа
     should_respond = False
     reply_to_message_id = None
     text_to_process = None
 
-    # Условие: Бот активен в группе и сообщение содержит его упоминание или это личный чат
-    if update.message.chat.type != 'private':  # Если сообщение в группе
+    if update.message.chat.type != 'private':  # Group chat
         if not is_bot_enabled(chat_id):
-            logger.info(f"Бот отключен в чате {chat_id}. Проверка group_status={group_status}")
+            logger.info(f"Bot is disabled in chat {chat_id}. group_status={group_status}")
             return
 
-        # Условие 1: Сообщение содержит тег бота или это прямое обращение к боту
         if f'@{bot_username}' in message_text:
             should_respond = True
-
-            # Если это ответ на сообщение другого пользователя, используем это сообщение
-            if update.message.reply_to_message:
-                message_to_reply = update.message.reply_to_message
-
-                # Проверка: сообщение, на которое отвечают, содержит текст или подпись к медиа
-                reply_message_text = message_to_reply.text or message_to_reply.caption
-                if reply_message_text:
-                    text_to_process = reply_message_text.strip()
-                    reply_to_message_id = message_to_reply.message_id
-                else:
-                    logger.info("Сообщение, на которое отвечают, не содержит текста. Игнорируем.")
-                    return  # Прекращаем обработку, если нет текста или подписи
-            else:
-                # Если это не ответ, обрабатываем текст текущего сообщения
-                text_to_process = message_text.replace(f'@{bot_username}', '').strip()
-
-        # Условие 2: Сообщение — это ответ на сообщение бота (например, продолжается обсуждение)
+            text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+            reply_to_message_id = update.message.message_id
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
             should_respond = True
-            text_to_process = message_text  # Текст ответа пользователя
-            reply_to_message_id = update.message.reply_to_message.message_id
-
-    else:  # Если сообщение в личном чате
+            text_to_process = message_text
+            reply_to_message_id = update.message.message_id
+    else:  # Private chat
         should_respond = True
         text_to_process = message_text
 
-    # Если бот не должен отвечать или текст для обработки пуст, прервать обработку
     if not should_respond or not text_to_process:
-        logger.info(f"Бот решил не отвечать. should_respond={should_respond}, text_to_process={text_to_process}")
+        logger.info(f"Bot decided not to respond. should_respond={should_respond}, text_to_process={text_to_process}")
         return
 
-    # Логирование текста для обработки
-    logger.info(f"Текст для обработки: {text_to_process}")
+    logger.info(f"Processing text: {text_to_process}")
 
-    # Получение персональности бота для пользователя
     personality = user_personalities.get(user_id, default_personality)
 
-    # Обновление initial_instructions с контекстом
     initial_instructions = [
         {"role": "system", "content": personality},
         {"role": "system", "content": "Пожалуйста, всегда отвечай на вопросы, которые адресованы тебе напрямую, независимо от темы."}
     ]
 
-    # Добавление сообщения в контекст разговора
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
-    conversation_context[user_id] = conversation_context[user_id][-10:]  # Ограничение контекста последними 10 сообщениями
+    conversation_context[user_id] = conversation_context[user_id][-10:]
 
-    # Формирование сообщений для ChatGPT
     messages = initial_instructions + conversation_context[user_id]
 
-    # Получение ответа от ChatGPT
     try:
+        await update.message.chat.send_action(action=ChatAction.TYPING)
         reply = await ask_chatgpt(messages)
     except Exception as e:
-        logger.error(f"Ошибка при обращении к OpenAI: {e}")
+        logger.error(f"Error accessing OpenAI: {e}")
         await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, повторите запрос.")
         return
 
-    # Экранирование специальных символов для MarkdownV2
     escaped_reply = escape_markdown_v2(reply)
 
-    # Проверка на максимальную длину сообщения в Telegram
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    # Отправка ответа в чат
     if reply_to_message_id:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
     else:
         await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
-    # Логирование взаимодействия
     await log_interaction(user_id, user_username, text_to_process, reply)
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Retrieves the latest news from the Lenta.ru RSS feed and sends it to the user.
+    Retrieves the latest news from the RSS feed and sends it to the user.
     """
     try:
         async with aiohttp.ClientSession() as session:
@@ -457,7 +420,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 if response.status == 200:
                     content = await response.text()
                     soup = BeautifulSoup(content, features='xml')
-                    items = soup.findAll('item')[:5]  # Get the first 5 news items
+                    items = soup.findAll('item')[:5]
 
                     news_message = "Вот последние новости:\n\n"
                     for item in items:
@@ -465,7 +428,6 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         link = item.link.text
                         news_message += f"*{title}*\n[Читать дальше]({link})\n\n"
 
-                    # Send the news message
                     await update.message.reply_text(
                         news_message,
                         parse_mode=ParseMode.MARKDOWN_V2,
@@ -481,9 +443,9 @@ async def main():
     """
     Starts the bot.
     """
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
     await init_db()
+
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
@@ -499,10 +461,8 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Run the bot
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.idle()
+    await application.run_polling()
 
 if __name__ == '__main__':
+    import asyncio
     asyncio.run(main())
