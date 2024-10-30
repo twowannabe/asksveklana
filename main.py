@@ -451,7 +451,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     try:
         # Use the BBC News RSS feed
-        response = requests.get('http://feeds.bbci.co.uk/news/rss.xml')
+        response = requests.get('https://lenta.ru/rss/news')
         response.raise_for_status()  # Check for request errors
 
         # Parse the XML content
