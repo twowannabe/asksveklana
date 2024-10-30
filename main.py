@@ -19,6 +19,7 @@ from telegram.ext import (
     ContextTypes,
 )
 import aiohttp
+import asyncio
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -43,9 +44,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global variables
-conversation_context = defaultdict(list)  # Conversation contexts
-group_status = defaultdict(bool)  # Bot activation status in groups
-user_personalities = defaultdict(str)  # User-specific bot personalities
+conversation_context = defaultdict(list)
+group_status = defaultdict(bool)
+user_personalities = defaultdict(str)
 
 # Default bot personality
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
@@ -72,7 +73,6 @@ async def init_db():
             timestamp TIMESTAMP
         )
         ''')
-        # Table for storing user personalities
         await conn.execute('''
         CREATE TABLE IF NOT EXISTS user_personalities (
             user_id BIGINT PRIMARY KEY,
@@ -132,18 +132,15 @@ async def ask_chatgpt(messages) -> str:
     """
     logger.info(f"Sending messages to ChatGPT: {messages}")
     try:
-        # Add system message to control response length
         messages_with_formatting = [
             {"role": "system", "content": "Пожалуйста, делай ответы краткими и не более 3500 символов."}
         ] + messages
 
-        # Check messages for empty content
         for message in messages_with_formatting:
             if not message.get("content"):
                 logger.error(f"Empty content in message: {message}")
                 return "Произошла ошибка: одно из сообщений было пустым."
 
-        # Use asynchronous OpenAI API
         response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=messages_with_formatting,
@@ -157,7 +154,6 @@ async def ask_chatgpt(messages) -> str:
 
         answer = add_emojis_at_end(answer)
 
-        # Ensure the message does not exceed Telegram's maximum length
         max_length = 4096
         if len(answer) > max_length:
             answer = answer[:max_length]
@@ -439,11 +435,12 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
-async def main():
+def main():
     """
     Starts the bot.
     """
-    await init_db()
+    # Initialize the database
+    asyncio.run(init_db())
 
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -461,8 +458,7 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Run the bot
-    await application.run_polling()
+    application.run_polling()
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+    main()
