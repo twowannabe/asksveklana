@@ -7,7 +7,7 @@ import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
-from telegram.helpers import escape_markdown
+from telegram.utils.helpers import escape_markdown
 from decouple import config
 import openai
 import psycopg2
