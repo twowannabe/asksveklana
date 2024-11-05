@@ -149,7 +149,7 @@ async def ask_chatgpt(messages) -> str:
         return error_msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text('Hello! I am your virtual friend Svetlana. Let's chat!')
+    await update.message.reply_text("Hello! I am your virtual friend Svetlana. Let's chat!")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
@@ -359,4 +359,3 @@ def main():
 if __name__ == '__main__':
     import asyncio
     asyncio.run(main())
- 
