@@ -22,6 +22,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
+# RSS feed for news_command
+NEWS_RSS_URL = config('NEWS_RSS_URL')
+
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
@@ -317,12 +320,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        response = requests.get('https://www.pravda.com.ua/rus/rss/view_news/')
+        response = requests.get(NEWS_RSS_URL)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, features='xml')
         items = soup.findAll('item')[:5]
 
-        news_message = "Latest news from pravda.com.ua:\n\n"
+        news_message = "Latest news:\n\n"
         for item in items:
             title = escape_markdown_v2(item.title.text)
             link = item.link.text
