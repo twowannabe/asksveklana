@@ -6,7 +6,7 @@ AskSveklana is an interactive Telegram bot that serves as a military and politic
 - Customizable bot personality for individual users.
 - Ability to generate concise, informative responses to user queries.
 - Image generation using OpenAI's image API.
-- News fetching and summarizing feature.
+- News fetching and summarizing feature (news source URL configurable via `.env` file).
 - Ability to enable or disable bot functionality in group chats.
 - Logging user interactions to PostgreSQL database.
 
@@ -44,6 +44,7 @@ AskSveklana is an interactive Telegram bot that serves as a military and politic
    DB_NAME=your_db_name
    DB_USER=your_db_user
    DB_PASSWORD=your_db_password
+   NEWS_RSS_URL=your_news_rss_url
    ```
 
 ## Usage
