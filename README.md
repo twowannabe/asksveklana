@@ -20,7 +20,7 @@ AskSveklana is an interactive Telegram bot that serves as a military and politic
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/asksveklana.git
+   git clone https://github.com/twowannabe/asksveklana.git
    cd asksveklana
    ```
 
@@ -80,10 +80,10 @@ You can set up a systemd service to run AskSveklana in the background:
    ```
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
+This project is licensed under a custom license. You may use, copy, and modify the code for personal, non-commercial purposes only, but you may not distribute or publish it. Proper attribution to the original author, Volodymyr Kozlov, is required. See the [LICENSE](LICENSE.md) file for details.
 
 ## Contributing
-Feel free to submit issues or pull requests for features, bug fixes, or other improvements. Contributions are welcome!
+Feel free to submit issues or pull requests for features, bug fixes, or other improvements. Contributions are welcome, but note that modifications should not be published or distributed.
 
 ## Acknowledgements
 - [OpenAI](https://openai.com) for providing the GPT models.
