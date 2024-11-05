@@ -251,6 +251,11 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Bot personality set to: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Проверка, что update.message не равен None
+    if update.message is None:
+        logger.warning("Received an update without a message. Ignoring.")
+        return
+
     bot_id = context.bot.id
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
@@ -303,7 +308,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+    if reply_to_message_id:
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+    else:
+        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
 
     log_interaction(user_id, user_username, text_to_process, reply)
 
