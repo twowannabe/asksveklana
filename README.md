@@ -1,63 +1,91 @@
-# README.md
+# AskSveklana
 
-## Описание
+AskSveklana is an interactive Telegram bot that serves as a military and political analyst, offering concise insights and analysis of current events. The bot is built using Python, OpenAI's GPT models, and Telegram Bot API. It also supports personalized bot personalities and user-specific interactions.
 
-Этот проект представляет собой Telegram-бота под названием "Свеклана". Свеклана — это виртуальный помощник, который может общаться с пользователями, генерировать изображения, предоставлять новости, а также выполнять другие функции, такие как изменение своей "личности".
+## Features
+- Customizable bot personality for individual users.
+- Ability to generate concise, informative responses to user queries.
+- Image generation using OpenAI's image API.
+- News fetching and summarizing feature.
+- Ability to enable or disable bot functionality in group chats.
+- Logging user interactions to PostgreSQL database.
 
-## Функциональные особенности
-- Поддержка генерации ответов с использованием OpenAI ChatGPT API
-- Логирование взаимодействий пользователей с ботом в базе данных PostgreSQL
-- Генерация изображений по запросу пользователя
-- Поддержка персонализации поведения бота
-- Получение и отправка последних новостей через RSS
+## Requirements
+- Python 3.11+
+- A PostgreSQL database
+- OpenAI API key
+- Telegram bot token
+- Libraries: `python-telegram-bot`, `openai`, `requests`, `beautifulsoup4`, `psycopg2`, `decouple`
 
-## Установка и настройка
-
-1. Склонируйте репозиторий:
+## Installation
+1. Clone the repository:
    ```bash
-   git clone <URL вашего репозитория>
-   cd <название репозитория>
+   git clone https://github.com/yourusername/asksveklana.git
+   cd asksveklana
    ```
 
-2. Создайте виртуальное окружение и активируйте его:
+2. Create a virtual environment and activate it:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # Для Windows используйте venv\Scripts\activate
+   python3 -m venv venv
+   source venv/bin/activate
    ```
 
-3. Установите зависимости:
+3. Install the dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Создайте файл `.env` и добавьте следующие переменные:
+4. Create a `.env` file with your configuration:
    ```
-   TELEGRAM_TOKEN=ваш_токен_бота
-   OPENAI_API_KEY=ваш_ключ_API_OpenAI
-   DB_HOST=ваш_хост_БД
-   DB_PORT=порт_БД
-   DB_NAME=имя_БД
-   DB_USER=имя_пользователя_БД
-   DB_PASSWORD=пароль_пользователя_БД
+   TELEGRAM_TOKEN=your_telegram_token
+   OPENAI_API_KEY=your_openai_api_key
+   DB_HOST=your_db_host
+   DB_PORT=your_db_port
+   DB_NAME=your_db_name
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
    ```
 
-5. Запустите бота:
+## Usage
+To start the bot:
+```bash
+python main.py
+```
+
+Make sure that the PostgreSQL database is running and accessible with the provided credentials.
+
+## Systemd Service Setup (Optional)
+You can set up a systemd service to run AskSveklana in the background:
+
+1. Create a systemd service file (`/etc/systemd/system/asksvetlana.service`):
+   ```
+   [Unit]
+   Description=AskSveklana Telegram Bot
+   After=network.target
+
+   [Service]
+   User=your_user
+   WorkingDirectory=/path/to/asksveklana
+   ExecStart=/path/to/venv/bin/python /path/to/asksveklana/main.py
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+2. Start and enable the service:
    ```bash
-   python bot.py
+   sudo systemctl start asksveklana.service
+   sudo systemctl enable asksveklana.service
    ```
 
-## Использование
-- `/start` — Начать общение с ботом
-- `/help` — Получить список доступных команд
-- `/image [запрос]` — Сгенерировать изображение по описанию
-- `/news` — Получить последние новости
-- `/reset` — Сбросить историю диалога
-- `/set_personality [описание]` — Установить личность бота
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE.md) file for details.
 
-## Требования
-- Python 3.8+
-- PostgreSQL
-- OpenAI API Key
+## Contributing
+Feel free to submit issues or pull requests for features, bug fixes, or other improvements. Contributions are welcome!
 
-## Лицензия
-Смотрите [LICENSE.md](LICENSE.md) для получения информации о лицензии.
+## Acknowledgements
+- [OpenAI](https://openai.com) for providing the GPT models.
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) for the easy-to-use Telegram bot API wrapper.
+- All contributors and open-source maintainers.

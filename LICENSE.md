@@ -1,15 +1,25 @@
-# LICENSE.md
+Custom License
 
-## Лицензия
+Copyright (c) 2024 Volodymyr Kozlov
 
-Авторские права (c) 2024, Владелец проекта.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, and modify the Software for personal, non-commercial purposes only,
+subject to the following conditions:
 
-Все права защищены.
+1. The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Данное программное обеспечение предоставляется только для личного использования и не может быть модифицировано или использовано в коммерческих целях без предварительного письменного разрешения автора.
+2. The Software or any modified versions thereof may not be published,
+distributed, sublicensed, or sold in any form.
 
-Запрещается:
-- Модификация исходного кода.
-- Использование программного обеспечения без согласия владельца.
+3. Proper attribution to the original author, Volodymyr Kozlov, must be retained
+in any usage or modification of the Software.
 
-Для получения разрешения на использование или внесение изменений, свяжитесь с владельцем проекта.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
