@@ -268,23 +268,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
         if f'@{bot_username}' in message_text:
             should_respond = True
-            if update.message.reply_to_message:
-                message_to_reply = update.message.reply_to_message
-                reply_message_text = message_to_reply.text or message_to_reply.caption
-                if reply_message_text:
-                    text_to_process = reply_message_text.strip()
-                    reply_to_message_id = message_to_reply.message_id
-                else:
-                    return
-            else:
-                text_to_process = message_text
+            text_to_process = message_text
+            reply_to_message_id = update.message.message_id
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
             should_respond = True
             text_to_process = message_text
-            reply_to_message_id = update.message.reply_to_message.message_id
+            reply_to_message_id = update.message.message_id
     else:
         should_respond = True
         text_to_process = message_text
+        reply_to_message_id = update.message.message_id
 
     if not should_respond or not text_to_process:
         return
@@ -310,10 +303,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    if reply_to_message_id:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
-    else:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+    await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
 
     log_interaction(user_id, user_username, text_to_process, reply)
 
