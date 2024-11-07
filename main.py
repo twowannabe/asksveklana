@@ -69,8 +69,12 @@ def get_db_connection():
     )
 
 def escape_markdown_v2(text):
-    escape_chars = r'_[]()~`>#+-=|{}.!'
+    escape_chars = r'[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+def convert_markdown_to_telegram(text):
+    text = text.replace('**', '*')
+    return text
 
 def init_db():
     try:
@@ -276,7 +280,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
         if f'@{bot_username}' in message_text:
             should_respond = True
-            text_to_process = message_text
+            text_to_process = message_text.replace(f'@{bot_username}', '').strip()
             reply_to_message_id = update.message.message_id
         elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
             should_respond = True
@@ -306,15 +310,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("An error occurred while contacting OpenAI. Please try again.")
         return
 
-    escaped_reply = escape_markdown_v2(reply)
+    # Преобразуем форматирование и экранируем специальные символы
+    formatted_reply = convert_markdown_to_telegram(reply)
+    escaped_reply = escape_markdown_v2(formatted_reply)
+
+    # Проверяем длину сообщения
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
+    # Отправляем сообщение с правильным парсингом
     if reply_to_message_id:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2, reply_to_message_id=reply_to_message_id)
+        await update.message.reply_text(
+            escaped_reply,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_to_message_id=reply_to_message_id
+        )
     else:
-        await update.message.reply_text(escaped_reply, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(
+            escaped_reply,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
 
     log_interaction(user_id, user_username, text_to_process, reply)
 
