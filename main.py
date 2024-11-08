@@ -258,7 +258,6 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Bot personality set to: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Проверка, что update.message не равен None
     if update.message is None:
         logger.warning("Received an update without a message. Ignoring.")
         return
@@ -291,6 +290,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
+    # Check if the message is a reply to another message and include that content
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        replied_text = update.message.reply_to_message.text
+        text_to_process = f"{replied_text}\n\nUser: {text_to_process}"
+
     if not should_respond or not text_to_process:
         return
 
@@ -310,16 +314,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("An error occurred while contacting OpenAI. Please try again.")
         return
 
-    # Преобразуем форматирование и экранируем специальные символы
     formatted_reply = convert_markdown_to_telegram(reply)
     escaped_reply = escape_markdown_v2(formatted_reply)
 
-    # Проверяем длину сообщения
     max_length = 4096
     if len(escaped_reply) > max_length:
         escaped_reply = escaped_reply[:max_length]
 
-    # Отправляем сообщение с правильным парсингом
     if reply_to_message_id:
         await update.message.reply_text(
             escaped_reply,
