@@ -302,6 +302,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("А тебе ли не похуй?", reply_to_message_id=reply_to_message_id)
         return
 
+    if random.random() < 0.01:
+        voice_file_path = '/root/inna_voice.ogg'
+        try:
+            await update.message.reply_voice(
+                voice=open(voice_file_path, 'rb'),
+                reply_to_message_id=reply_to_message_id
+            )
+        except Exception as e:
+            logger.error(f"Error sending voice message: {str(e)}")
+            await update.message.reply_text("Error sending voice message.")
+        return
+
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [
         {"role": "system", "content": personality},
