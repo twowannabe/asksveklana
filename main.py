@@ -21,6 +21,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+import random
 
 # RSS feed for news_command
 NEWS_RSS_URL = config('NEWS_RSS_URL')
@@ -290,12 +291,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
-    # Check if the message is a reply to another message and include that content
     if update.message.reply_to_message and update.message.reply_to_message.text:
         replied_text = update.message.reply_to_message.text
         text_to_process = f"{replied_text}\n\nUser: {text_to_process}"
 
     if not should_respond or not text_to_process:
+        return
+
+    if random.random() < 0.1:
+        await update.message.reply_text("А тебе ли не похуй?", reply_to_message_id=reply_to_message_id)
         return
 
     personality = user_personalities.get(user_id, default_personality)
