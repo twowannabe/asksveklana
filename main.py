@@ -302,7 +302,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("А тебе ли не похуй?", reply_to_message_id=reply_to_message_id)
         return
 
-    if random.random() < 0.01:
+    if random.random() < 0.1:
         voice_file_path = '/root/inna_voice.ogg'
         try:
             await update.message.reply_voice(
