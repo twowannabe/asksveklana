@@ -40,6 +40,8 @@ DB_PASSWORD = config('DB_PASSWORD')
 # Set API key for OpenAI
 openai.api_key = OPENAI_API_KEY
 
+latest_news_titles = []
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -259,6 +261,7 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Bot personality set to: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global latest_news_titles
     if update.message is None:
         logger.warning("Received an update without a message. Ignoring.")
         return
@@ -266,7 +269,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     bot_id = context.bot.id
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
-    user_username = update.message.from_user.username
     bot_username = context.bot.username
     message_text = update.message.text.strip() if update.message.text else update.message.caption
     message_text = message_text.strip() if message_text else ""
@@ -291,29 +293,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
-    if update.message.reply_to_message and update.message.reply_to_message.text:
-        replied_text = update.message.reply_to_message.text
-        text_to_process = f"{replied_text}\n\nUser: {text_to_process}"
+    # Проверка на запрос "расскажи подробнее"
+    if "расскажи подробнее" in message_text.lower() and latest_news_titles:
+        detailed_response = "Вот что я думаю по поводу этих новостей:\n\n"
+        for title in latest_news_titles:
+            # Вызываем функцию анализа, чтобы бот «рассказал» о каждой новости
+            detailed_response += f"- {title}: {await ask_chatgpt([{'role': 'user', 'content': title}])}\n\n"
+
+        await update.message.reply_text(detailed_response)
+        return
 
     if not should_respond or not text_to_process:
         return
 
-    if random.random() < 0.1:
-        await update.message.reply_text("А тебе ли не похуй?", reply_to_message_id=reply_to_message_id)
-        return
-
-    if random.random() < 0.1:
-        voice_file_path = '/root/inna_voice.ogg'
-        try:
-            await update.message.reply_voice(
-                voice=open(voice_file_path, 'rb'),
-                reply_to_message_id=reply_to_message_id
-            )
-        except Exception as e:
-            logger.error(f"Error sending voice message: {str(e)}")
-            await update.message.reply_text("Error sending voice message.")
-        return
-
+    # Остальная часть функции handle_message для обычной обработки сообщений
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [
         {"role": "system", "content": personality},
@@ -352,6 +345,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     log_interaction(user_id, user_username, text_to_process, reply)
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global latest_news_titles
+    latest_news_titles = []  # Обнуляем список перед каждой новой командой
+
     try:
         response = requests.get(NEWS_RSS_URL)
         response.raise_for_status()
@@ -362,6 +358,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         for item in items:
             title = escape_markdown_v2(item.title.text)
             link = item.link.text
+            latest_news_titles.append(title)  # Сохраняем заголовок в список
             news_message += f"*{title}*\n[Read more]({link})\n\n"
 
         await update.message.reply_text(
