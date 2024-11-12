@@ -39,6 +39,9 @@ DB_NAME = config('DB_NAME')
 DB_USER = config('DB_USER')
 DB_PASSWORD = config('DB_PASSWORD')
 
+# RSS feed для команды news_command
+NEWS_RSS_URL = config('NEWS_RSS_URL')
+
 # Set API key for OpenAI
 openai.api_key = OPENAI_API_KEY
 
@@ -60,10 +63,9 @@ group_status = defaultdict(bool)
 user_personalities = defaultdict(str)
 
 # Default bot personality
-default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
+default_personality = "Ты Светлана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
-# Инициализировать модели для описания изображений и перевода:
-# Модель для генерации описания изображений
+# Инициализация моделей для описания изображений и перевода
 model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
@@ -161,16 +163,16 @@ async def ask_chatgpt(messages) -> str:
 
         return answer
     except openai.error.RateLimitError:
-        error_msg = "Exceeded OpenAI API request limit. Please try again later."
+        error_msg = "Превышен лимит запросов к OpenAI API. Пожалуйста, попробуйте позже."
         logger.error(error_msg)
         return error_msg
     except openai.error.InvalidRequestError as e:
-        error_msg = f"OpenAI API request error: {str(e)}"
+        error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
     except Exception as e:
         logger.error("Error contacting ChatGPT", exc_info=True)
-        error_msg = f"Error contacting ChatGPT: {str(e)}"
+        error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
         return error_msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -275,6 +277,28 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Error saving personality to database: {str(e)}")
     await update.message.reply_text(f"Личность бота установлена: {personality}")
 
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        response = requests.get(NEWS_RSS_URL)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, features='xml')
+        items = soup.findAll('item')[:5]
+
+        news_message = "Последние новости:\n\n"
+        for item in items:
+            title = escape_markdown_v2(item.title.text)
+            link = item.link.text
+            news_message += f"*{title}*\n[Читать далее]({link})\n\n"
+
+        await update.message.reply_text(
+            news_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving news: {str(e)}")
+        await update.message.reply_text("Произошла ошибка при получении новостей.")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         logger.warning("Received an update without a message. Ignoring.")
@@ -348,7 +372,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [
         {"role": "system", "content": personality},
-        {"role": "system", "content": "Always answer questions addressed to you."}
+        {"role": "system", "content": "Всегда отвечай на вопросы, адресованные тебе."}
     ]
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
     conversation_context[user_id] = conversation_context[user_id][-10:]
@@ -401,6 +425,7 @@ def main():
     application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
+    application.add_handler(CommandHandler("news", news_command))  # Добавляем этот обработчик
     # application.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # Удаляем этот обработчик
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
