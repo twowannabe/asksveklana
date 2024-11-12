@@ -62,6 +62,21 @@ user_personalities = defaultdict(str)
 # Default bot personality
 default_personality = "Ты Свеклана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
+# Инициализировать модели для описания изображений и перевода:
+# Модель для генерации описания изображений
+model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+
+# Устройство (CPU или GPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# Модель для перевода с английского на русский
+translation_model_name = 'Helsinki-NLP/opus-mt-en-ru'
+translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
+translation_model = MarianMTModel.from_pretrained(translation_model_name).to(device)
+
 def get_db_connection():
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -276,10 +291,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reply_to_message_id = None
     text_to_process = None
 
+    # Проверяем, упомянут ли бот в сообщении
+    is_bot_mentioned = f'@{bot_username}' in message_text
+
+    # Проверяем, является ли сообщение ответом на другое сообщение
+    is_reply = update.message.reply_to_message is not None
+
+    # Проверяем, содержит ли исходное сообщение изображение
+    original_message_has_photo = is_reply and update.message.reply_to_message.photo
+
+    if is_bot_mentioned and is_reply and original_message_has_photo:
+        # Пользователь ответил на сообщение с изображением, упомянув бота
+        photo = update.message.reply_to_message.photo[-1]  # Получаем фото в наивысшем разрешении
+        file_id = photo.file_id
+        new_file = await context.bot.get_file(file_id)
+        # Скачиваем файл
+        file_bytes = await new_file.download_as_bytearray()
+        image = Image.open(io.BytesIO(file_bytes)).convert('RGB')
+
+        # Пробуем извлечь текст с помощью pytesseract
+        extracted_text = pytesseract.image_to_string(image, lang='rus+eng')
+        if extracted_text.strip():
+            # Если текст найден, отправляем его пользователю
+            await update.message.reply_text(f"Извлеченный текст из изображения:\n{extracted_text}")
+        else:
+            # Если текст не найден, генерируем описание сцены
+            pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
+            output_ids = model.generate(pixel_values, max_length=16, num_beams=4)
+            caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+            # Переводим описание на русский язык
+            translated_caption = translate_text(caption)
+            await update.message.reply_text(f"Описание изображения:\n{translated_caption}")
+
+        return  # Завершаем обработку, так как мы уже ответили на сообщение
+
     if update.message.chat.type != 'private':
         if not is_bot_enabled(chat_id):
             return
-        if f'@{bot_username}' in message_text:
+        if is_bot_mentioned:
             should_respond = True
             text_to_process = message_text.replace(f'@{bot_username}', '').strip()
             reply_to_message_id = update.message.message_id
@@ -333,30 +383,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_username = update.message.from_user.username if update.message.from_user.username else ''
     log_interaction(user_id, user_username, text_to_process, reply)
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.photo:
-        photo = update.message.photo[-1]  # Получаем фото в наивысшем разрешении
-        file_id = photo.file_id
-        new_file = await context.bot.get_file(file_id)
-        # Скачиваем файл
-        file_bytes = await new_file.download_as_bytearray()
-        image = Image.open(io.BytesIO(file_bytes)).convert('RGB')
-
-        # Пробуем извлечь текст с помощью pytesseract
-        extracted_text = pytesseract.image_to_string(image, lang='rus+eng')
-        if extracted_text.strip():
-            # Если текст найден, отправляем его пользователю
-            await update.message.reply_text(f"Извлеченный текст из изображения:\n{extracted_text}")
-        else:
-            # Если текст не найден, генерируем описание сцены
-            pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
-            output_ids = model.generate(pixel_values, max_length=16, num_beams=4)
-            caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-            # Переводим описание на русский язык
-            translated_caption = translate_text(caption)
-            await update.message.reply_text(f"Описание изображения:\n{translated_caption}")
-
 def translate_text(text):
     tokens = translation_tokenizer([text], return_tensors='pt', padding=True).to(device)
     translation = translation_model.generate(**tokens)
@@ -375,7 +401,7 @@ def main():
     application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    # application.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # Удаляем этот обработчик
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     application.run_polling()
