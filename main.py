@@ -21,10 +21,12 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-import random
-
-# RSS feed for news_command
-NEWS_RSS_URL = config('NEWS_RSS_URL')
+from PIL import Image
+import io
+import pytesseract
+from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
+import torch
+from transformers import MarianMTModel, MarianTokenizer
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -39,8 +41,6 @@ DB_PASSWORD = config('DB_PASSWORD')
 
 # Set API key for OpenAI
 openai.api_key = OPENAI_API_KEY
-
-latest_news_titles = []
 
 # Configure logging
 logging.basicConfig(
@@ -159,19 +159,19 @@ async def ask_chatgpt(messages) -> str:
         return error_msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Hello! I am your virtual friend Svetlana. Let's chat!")
+    await update.message.reply_text("Привет! Я твоя виртуальная подруга Светлана. Давай общаться!")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
-        "Available commands:\n"
-        "/start - Start a conversation\n"
-        "/help - Show this help message\n"
-        "/enable - Enable bot in this group (admins only)\n"
-        "/disable - Disable bot in this group (admins only)\n"
-        "/image [description] - Generate an image\n"
-        "/reset - Reset conversation history\n"
-        "/set_personality [description] - Set bot personality\n"
-        "/news - Get the latest news\n"
+        "Доступные команды:\n"
+        "/start - Начать беседу\n"
+        "/help - Показать это сообщение\n"
+        "/enable - Включить бота в этой группе (только для администраторов)\n"
+        "/disable - Выключить бота в этой группе (только для администраторов)\n"
+        "/image [описание] - Сгенерировать изображение\n"
+        "/reset - Сбросить историю диалога\n"
+        "/set_personality [описание] - Установить личность бота\n"
+        "/news - Получить последние новости\n"
     )
     await update.message.reply_text(help_text)
 
@@ -183,17 +183,17 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     chat_id = update.message.chat.id
     if await is_user_admin(update):
         group_status[chat_id] = True
-        await update.message.reply_text("Bot enabled in this group!")
+        await update.message.reply_text("Бот включен в этой группе!")
     else:
-        await update.message.reply_text("Only admins can execute this command.")
+        await update.message.reply_text("Только администраторы могут выполнять эту команду.")
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat.id
     if await is_user_admin(update):
         group_status[chat_id] = False
-        await update.message.reply_text("Bot disabled in this group!")
+        await update.message.reply_text("Бот отключен в этой группе!")
     else:
-        await update.message.reply_text("Only admins can execute this command.")
+        await update.message.reply_text("Только администраторы могут выполнять эту команду.")
 
 def is_bot_enabled(chat_id: int) -> bool:
     return group_status.get(chat_id, False)
@@ -225,7 +225,7 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_u
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_input = ' '.join(context.args)
     if not user_input:
-        await update.message.reply_text("Please provide a description after the /image command.")
+        await update.message.reply_text("Пожалуйста, укажите описание после команды /image.")
         return
     image_url = generate_image(user_input)
     if image_url.startswith("Error"):
@@ -236,12 +236,12 @@ async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
     conversation_context[user_id] = []
-    await update.message.reply_text("Conversation history reset.")
+    await update.message.reply_text("История диалога сброшена.")
 
 async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     personality = ' '.join(context.args)
     if not personality:
-        await update.message.reply_text("Please provide a personality description after the /set_personality command.")
+        await update.message.reply_text("Пожалуйста, предоставьте описание личности после команды /set_personality.")
         return
     user_id = update.message.from_user.id
     user_personalities[user_id] = personality
@@ -258,10 +258,9 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         conn.close()
     except Exception as e:
         logger.error(f"Error saving personality to database: {str(e)}")
-    await update.message.reply_text(f"Bot personality set to: {personality}")
+    await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global latest_news_titles
     if update.message is None:
         logger.warning("Received an update without a message. Ignoring.")
         return
@@ -293,20 +292,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
-    # Проверка на запрос "расскажи подробнее"
-    if "расскажи подробнее" in message_text.lower() and latest_news_titles:
-        detailed_response = "Вот что я думаю по поводу этих новостей:\n\n"
-        for title in latest_news_titles:
-            # Вызываем функцию анализа, чтобы бот «рассказал» о каждой новости
-            detailed_response += f"- {title}: {await ask_chatgpt([{'role': 'user', 'content': title}])}\n\n"
-
-        await update.message.reply_text(detailed_response)
-        return
-
     if not should_respond or not text_to_process:
         return
 
-    # Остальная часть функции handle_message для обычной обработки сообщений
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [
         {"role": "system", "content": personality},
@@ -320,7 +308,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply = await ask_chatgpt(messages)
     except Exception as e:
         logger.error(f"Error contacting OpenAI: {e}")
-        await update.message.reply_text("An error occurred while contacting OpenAI. Please try again.")
+        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, попробуйте еще раз.")
         return
 
     formatted_reply = convert_markdown_to_telegram(reply)
@@ -342,33 +330,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
+    user_username = update.message.from_user.username if update.message.from_user.username else ''
     log_interaction(user_id, user_username, text_to_process, reply)
 
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global latest_news_titles
-    latest_news_titles = []  # Обнуляем список перед каждой новой командой
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message.photo:
+        photo = update.message.photo[-1]  # Получаем фото в наивысшем разрешении
+        file_id = photo.file_id
+        new_file = await context.bot.get_file(file_id)
+        # Скачиваем файл
+        file_bytes = await new_file.download_as_bytearray()
+        image = Image.open(io.BytesIO(file_bytes)).convert('RGB')
 
-    try:
-        response = requests.get(NEWS_RSS_URL)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, features='xml')
-        items = soup.findAll('item')[:5]
+        # Пробуем извлечь текст с помощью pytesseract
+        extracted_text = pytesseract.image_to_string(image, lang='rus+eng')
+        if extracted_text.strip():
+            # Если текст найден, отправляем его пользователю
+            await update.message.reply_text(f"Извлеченный текст из изображения:\n{extracted_text}")
+        else:
+            # Если текст не найден, генерируем описание сцены
+            pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
+            output_ids = model.generate(pixel_values, max_length=16, num_beams=4)
+            caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        news_message = "Latest news:\n\n"
-        for item in items:
-            title = escape_markdown_v2(item.title.text)
-            link = item.link.text
-            latest_news_titles.append(title)  # Сохраняем заголовок в список
-            news_message += f"*{title}*\n[Read more]({link})\n\n"
+            # Переводим описание на русский язык
+            translated_caption = translate_text(caption)
+            await update.message.reply_text(f"Описание изображения:\n{translated_caption}")
 
-        await update.message.reply_text(
-            news_message,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            disable_web_page_preview=True
-        )
-    except Exception as e:
-        logger.error(f"Error retrieving news: {str(e)}")
-        await update.message.reply_text("An error occurred while fetching news.")
+def translate_text(text):
+    tokens = translation_tokenizer([text], return_tensors='pt', padding=True).to(device)
+    translation = translation_model.generate(**tokens)
+    translated_text = translation_tokenizer.batch_decode(translation, skip_special_tokens=True)[0]
+    return translated_text
 
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
@@ -382,7 +375,7 @@ def main():
     application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
-    application.add_handler(CommandHandler("news", news_command))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     application.run_polling()
