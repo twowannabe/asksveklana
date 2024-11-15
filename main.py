@@ -381,11 +381,13 @@ def translate_text(text):
     translated_text = translation_tokenizer.batch_decode(translation, skip_special_tokens=True)[0]
     return translated_text
 
-async def main():
+def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+    # Инициализация базы данных
     init_db()
 
+    # Добавляем обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("enable", enable_bot))
@@ -396,11 +398,8 @@ async def main():
     application.add_handler(CommandHandler("news", news_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    await application.initialize()
-    await application.start()
-    await application.run_polling()  # run_polling запустит и управит циклом событий
-    await application.shutdown()
+    # Запускаем polling напрямую
+    application.run_polling()
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(main())
+    main()
