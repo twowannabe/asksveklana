@@ -381,7 +381,7 @@ def translate_text(text):
     translated_text = translation_tokenizer.batch_decode(translation, skip_special_tokens=True)[0]
     return translated_text
 
-def main():
+async def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     init_db()
@@ -393,11 +393,10 @@ def main():
     application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
-    application.add_handler(CommandHandler("news", news_command))  # Добавляем этот обработчик
-    # application.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # Удаляем этот обработчик
+    application.add_handler(CommandHandler("news", news_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
     import asyncio
