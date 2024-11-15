@@ -308,12 +308,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
     bot_username = context.bot.username
-    message_text = update.message.text.strip() if update.message.text else update.message.caption
-    message_text = message_text.strip() if message_text else ""
-
-    should_respond = False
-    reply_to_message_id = None
-    text_to_process = None
+    message_text = update.message.text.strip() if update.message.text else ""
 
     # Проверяем, упомянут ли бот в сообщении
     is_bot_mentioned = f'@{bot_username}' in message_text
@@ -321,68 +316,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Проверяем, является ли сообщение ответом на другое сообщение
     is_reply = update.message.reply_to_message is not None
 
-    # Проверяем, содержит ли исходное сообщение изображение
-    original_message_has_photo = is_reply and update.message.reply_to_message.photo
+    should_respond = False
+    reply_to_message_id = None
+    text_to_process = None
 
-    if is_bot_mentioned and is_reply and original_message_has_photo:
-        # Пользователь ответил на сообщение с изображением, упомянув бота
-        photo = update.message.reply_to_message.photo[-1]  # Получаем фото в наивысшем разрешении
-        file_id = photo.file_id
-        new_file = await context.bot.get_file(file_id)
-        # Скачиваем файл
-        file_bytes = await new_file.download_as_bytearray()
-        image = Image.open(io.BytesIO(file_bytes)).convert('RGB')
-
-        # Пробуем извлечь текст с помощью pytesseract
-        extracted_text = pytesseract.image_to_string(image, lang='rus+eng')
-        if extracted_text.strip():
-            # Если текст найден, отправляем его пользователю
-            await update.message.reply_text(f"Извлеченный текст из изображения:\n{extracted_text}")
-        else:
-            # Если текст не найден, генерируем описание сцены
-            pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(device)
-            output_ids = model.generate(pixel_values, max_length=16, num_beams=4)
-            caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-            # Переводим описание на русский язык
-            translated_caption = translate_text(caption)
-            await update.message.reply_text(f"Описание изображения:\n{translated_caption}")
-
-        return  # Завершаем обработку, так как мы уже ответили на сообщение
-
-    if update.message.chat.type != 'private':
-        if not is_bot_enabled(chat_id):
-            return
-        if is_bot_mentioned:
-            should_respond = True
-            text_to_process = message_text.replace(f'@{bot_username}', '').strip()
-            reply_to_message_id = update.message.message_id
-        elif update.message.reply_to_message and update.message.reply_to_message.from_user.id == bot_id:
-            should_respond = True
-            text_to_process = message_text
-            reply_to_message_id = update.message.message_id
-    else:
+    # Если бот упомянут в ответе на сообщение, используем текст из исходного сообщения
+    if is_reply and is_bot_mentioned:
+        original_message = update.message.reply_to_message.text or ""
+        text_to_process = original_message
         should_respond = True
-        text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
+    # Личная переписка (не группа)
+    if update.message.chat.type == 'private':
+        should_respond = True
+        text_to_process = message_text
+
+    # Проверка на включение бота в группе
     if not should_respond or not text_to_process:
         return
 
+    # Личность бота
     personality = user_personalities.get(user_id, default_personality)
     initial_instructions = [
         {"role": "system", "content": personality},
         {"role": "system", "content": "Всегда отвечай на вопросы, адресованные тебе."}
     ]
     conversation_context[user_id].append({"role": "user", "content": text_to_process})
-    conversation_context[user_id] = conversation_context[user_id][-10:]
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
     messages = initial_instructions + conversation_context[user_id]
 
     try:
         reply = await ask_chatgpt(messages)
     except Exception as e:
         logger.error(f"Error contacting OpenAI: {e}")
-        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Пожалуйста, попробуйте еще раз.")
+        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
         return
 
     formatted_reply = convert_markdown_to_telegram(reply)
