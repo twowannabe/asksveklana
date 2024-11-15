@@ -396,8 +396,11 @@ async def main():
     application.add_handler(CommandHandler("news", news_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    await application.run_polling()
+    await application.initialize()
+    await application.start()
+    await application.run_polling()  # run_polling запустит и управит циклом событий
+    await application.shutdown()
 
 if __name__ == '__main__':
     import asyncio
-    asyncio.run(main())
+    asyncio.get_event_loop().run_until_complete(main())
