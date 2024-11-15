@@ -326,54 +326,54 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text_to_process = original_message
         should_respond = True
         reply_to_message_id = update.message.message_id
-
-    # Личная переписка (не группа)
-    if update.message.chat.type == 'private':
+    elif is_bot_mentioned:
         should_respond = True
-        text_to_process = message_text
+        text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+        reply_to_message_id = update.message.message_id
 
-    # Проверка на включение бота в группе
-    if not should_respond or not text_to_process:
+    # Если бот включен в группе, но сообщение не является личным, проверяем статус бота в группе
+    if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
         return
 
-    # Личность бота
-    personality = user_personalities.get(user_id, default_personality)
-    initial_instructions = [
-        {"role": "system", "content": personality},
-        {"role": "system", "content": "Всегда отвечай на вопросы, адресованные тебе."}
-    ]
-    conversation_context[user_id].append({"role": "user", "content": text_to_process})
-    conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
-    messages = initial_instructions + conversation_context[user_id]
+    # Если бот должен ответить и есть текст для обработки
+    if should_respond and text_to_process:
+        personality = user_personalities.get(user_id, default_personality)
+        initial_instructions = [
+            {"role": "system", "content": personality},
+            {"role": "system", "content": "Всегда отвечай на вопросы, адресованные тебе."}
+        ]
+        conversation_context[user_id].append({"role": "user", "content": text_to_process})
+        conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
+        messages = initial_instructions + conversation_context[user_id]
 
-    try:
-        reply = await ask_chatgpt(messages)
-    except Exception as e:
-        logger.error(f"Error contacting OpenAI: {e}")
-        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
-        return
+        try:
+            reply = await ask_chatgpt(messages)
+        except Exception as e:
+            logger.error(f"Error contacting OpenAI: {e}")
+            await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
+            return
 
-    formatted_reply = convert_markdown_to_telegram(reply)
-    escaped_reply = escape_markdown_v2(formatted_reply)
+        formatted_reply = convert_markdown_to_telegram(reply)
+        escaped_reply = escape_markdown_v2(formatted_reply)
 
-    max_length = 4096
-    if len(escaped_reply) > max_length:
-        escaped_reply = escaped_reply[:max_length]
+        max_length = 4096
+        if len(escaped_reply) > max_length:
+            escaped_reply = escaped_reply[:max_length]
 
-    if reply_to_message_id:
-        await update.message.reply_text(
-            escaped_reply,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_to_message_id=reply_to_message_id
-        )
-    else:
-        await update.message.reply_text(
-            escaped_reply,
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
+        if reply_to_message_id:
+            await update.message.reply_text(
+                escaped_reply,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_to_message_id=reply_to_message_id
+            )
+        else:
+            await update.message.reply_text(
+                escaped_reply,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
 
-    user_username = update.message.from_user.username if update.message.from_user.username else ''
-    log_interaction(user_id, user_username, text_to_process, reply)
+        user_username = update.message.from_user.username if update.message.from_user.username else ''
+        log_interaction(user_id, user_username, text_to_process, reply)
 
 def translate_text(text):
     tokens = translation_tokenizer([text], return_tensors='pt', padding=True).to(device)
