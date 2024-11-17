@@ -260,19 +260,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Проверяем, является ли сообщение ответом на другое сообщение
     is_reply = update.message.reply_to_message is not None
 
+    # Проверяем, является ли сообщение ответом на сообщение бота
+    is_reply_to_bot = is_reply and update.message.reply_to_message.from_user.id == bot_id
+
     should_respond = False
     reply_to_message_id = None
     text_to_process = None
 
-    # Если бот упомянут в ответе на сообщение, используем текст из исходного сообщения
-    if is_reply and is_bot_mentioned:
-        original_message = update.message.reply_to_message.text or ""
-        text_to_process = original_message
-        should_respond = True
-        reply_to_message_id = update.message.message_id
-    elif is_bot_mentioned:
+    if is_bot_mentioned:
+        # Если бот упомянут, обрабатываем сообщение
         should_respond = True
         text_to_process = message_text.replace(f'@{bot_username}', '').strip()
+        reply_to_message_id = update.message.message_id
+    elif is_reply_to_bot:
+        # Если сообщение является ответом на сообщение бота, обрабатываем текст пользователя
+        should_respond = True
+        text_to_process = message_text  # Используем текст сообщения пользователя
         reply_to_message_id = update.message.message_id
 
     # Если бот включен в группе, но сообщение не является личным, проверяем статус бота в группе
