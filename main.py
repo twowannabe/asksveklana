@@ -21,31 +21,25 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from PIL import Image
-import io
-import pytesseract
-from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
-import torch
-from transformers import MarianMTModel, MarianTokenizer
 
-# Load configuration from .env file
+# Загрузка конфигурации из файла .env
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
 
-# PostgreSQL database settings
+# Настройки базы данных PostgreSQL
 DB_HOST = config('DB_HOST')
 DB_PORT = config('DB_PORT')
 DB_NAME = config('DB_NAME')
 DB_USER = config('DB_USER')
 DB_PASSWORD = config('DB_PASSWORD')
 
-# RSS feed для команды news_command
+# RSS-лента для команды news_command
 NEWS_RSS_URL = config('NEWS_RSS_URL')
 
-# Set API key for OpenAI
+# Установка API-ключа для OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Configure logging
+# Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -53,31 +47,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Reduce logging level for external libraries
+# Уменьшение уровня логирования для внешних библиотек
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('telegram').setLevel(logging.WARNING)
 
-# Global variables
+# Глобальные переменные
 conversation_context = defaultdict(list)
 group_status = defaultdict(bool)
 user_personalities = defaultdict(str)
 
-# Default bot personality
+# Личность бота по умолчанию
 default_personality = "Ты Светлана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
-
-# Инициализация моделей для описания изображений и перевода
-model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-
-# Устройство (CPU или GPU)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-# Модель для перевода с английского на русский
-translation_model_name = 'Helsinki-NLP/opus-mt-en-ru'
-translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
-translation_model = MarianMTModel.from_pretrained(translation_model_name).to(device)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -185,7 +165,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/help - Показать это сообщение\n"
         "/enable - Включить бота в этой группе (только для администраторов)\n"
         "/disable - Выключить бота в этой группе (только для администраторов)\n"
-        "/image [описание] - Сгенерировать изображение\n"
         "/reset - Сбросить историю диалога\n"
         "/set_personality [описание] - Установить личность бота\n"
         "/news - Получить последние новости\n"
@@ -214,41 +193,6 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 def is_bot_enabled(chat_id: int) -> bool:
     return group_status.get(chat_id, False)
-
-def generate_image(prompt: str) -> str:
-    logger.info(f"Requesting image generation with prompt: {prompt}")
-    try:
-        response = openai.Image.create(
-            prompt=prompt,
-            n=1,
-            size="1024x1024"
-        )
-        return response['data'][0]['url']
-    except Exception as e:
-        error_msg = f"Error generating image: {str(e)}"
-        logger.error(error_msg)
-        return error_msg
-
-async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE, image_url: str) -> None:
-    try:
-        response = requests.get(image_url)
-        image = BytesIO(response.content)
-        image.name = 'image.png'
-        await update.message.reply_photo(photo=image)
-    except Exception as e:
-        logger.error(f"Error sending image: {str(e)}")
-        await update.message.reply_text(f"Error sending image: {str(e)}")
-
-async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_input = ' '.join(context.args)
-    if not user_input:
-        await update.message.reply_text("Пожалуйста, укажите описание после команды /image.")
-        return
-    image_url = generate_image(user_input)
-    if image_url.startswith("Error"):
-        await update.message.reply_text(image_url)
-    else:
-        await send_image(update, context, image_url)
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
@@ -375,12 +319,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
 
-def translate_text(text):
-    tokens = translation_tokenizer([text], return_tensors='pt', padding=True).to(device)
-    translation = translation_model.generate(**tokens)
-    translated_text = translation_tokenizer.batch_decode(translation, skip_special_tokens=True)[0]
-    return translated_text
-
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -392,7 +330,6 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("enable", enable_bot))
     application.add_handler(CommandHandler("disable", disable_bot))
-    application.add_handler(CommandHandler("image", image_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
     application.add_handler(CommandHandler("news", news_command))
