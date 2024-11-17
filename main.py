@@ -10,6 +10,7 @@ from io import BytesIO
 from telegram.helpers import escape_markdown
 from decouple import config
 import openai
+from openai.exceptions import RateLimitError, InvalidRequestError
 import psycopg2
 from bs4 import BeautifulSoup
 from telegram import Update
@@ -142,11 +143,11 @@ async def ask_chatgpt(messages) -> str:
         logger.info(f"ChatGPT response: {answer}")
 
         return answer
-    except openai.error.RateLimitError:
+    except RateLimitError:
         error_msg = "Превышен лимит запросов к OpenAI API. Пожалуйста, попробуйте позже."
         logger.error(error_msg)
         return error_msg
-    except openai.error.InvalidRequestError as e:
+    except InvalidRequestError as e:
         error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
