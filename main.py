@@ -10,7 +10,8 @@ from io import BytesIO
 from telegram.helpers import escape_markdown
 from decouple import config
 import openai
-from openai.error import RateLimitError, InvalidRequestError, OpenAIError
+from openai import OpenAIError
+from httpx import HTTPStatusError
 import psycopg2
 from bs4 import BeautifulSoup
 from telegram import Update
@@ -126,13 +127,8 @@ async def ask_chatgpt(messages) -> str:
             {"role": "system", "content": "Keep responses concise and no more than 3500 characters."}
         ] + messages
 
-        for message in messages_with_formatting:
-            if not message.get("content"):
-                logger.error(f"Empty content in message: {message}")
-                return "An error occurred: one of the messages was empty."
-
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=messages_with_formatting,
             max_tokens=700,
             temperature=0.2,
@@ -141,21 +137,17 @@ async def ask_chatgpt(messages) -> str:
 
         answer = response.choices[0].message['content'].strip()
         logger.info(f"ChatGPT response: {answer}")
-
         return answer
-    except RateLimitError:
-        error_msg = "Превышен лимит запросов к OpenAI API. Пожалуйста, попробуйте позже."
-        logger.error(error_msg)
-        return error_msg
-    except InvalidRequestError as e:
-        error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
-        logger.error(error_msg)
-        return error_msg
-    except OpenAIError as e:
+
+    except OpenAIError as e:  # Обработка ошибок OpenAI API
         error_msg = f"Ошибка OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
-    except Exception as e:
+    except HTTPStatusError as e:  # Обработка сетевых ошибок
+        error_msg = f"Ошибка сети: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+    except Exception as e:  # Общая обработка всех остальных ошибок
         logger.error("Unexpected error contacting ChatGPT", exc_info=True)
         error_msg = f"Произошла неожиданная ошибка: {str(e)}"
         return error_msg
