@@ -123,35 +123,27 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
 async def ask_chatgpt(messages) -> str:
     logger.info(f"Sending messages to ChatGPT: {messages}")
     try:
-        messages_with_formatting = [
-            {"role": "system", "content": "Keep responses concise and no more than 3500 characters."}
-        ] + messages
-
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
-            messages=messages_with_formatting,
+        # Используем новый API ChatCompletion
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=messages,
             max_tokens=700,
-            temperature=0.2,
-            n=1
+            temperature=0.2
         )
 
-        answer = response.choices[0].message['content'].strip()
+        # Ответ из нового интерфейса
+        answer = response['choices'][0]['message']['content'].strip()
         logger.info(f"ChatGPT response: {answer}")
         return answer
 
-    except OpenAIError as e:  # Обработка ошибок OpenAI API
+    except openai.error.OpenAIError as e:
         error_msg = f"Ошибка OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
-    except HTTPStatusError as e:  # Обработка сетевых ошибок
-        error_msg = f"Ошибка сети: {str(e)}"
-        logger.error(error_msg)
-        return error_msg
-    except Exception as e:  # Общая обработка всех остальных ошибок
+    except Exception as e:
         logger.error("Unexpected error contacting ChatGPT", exc_info=True)
-        error_msg = f"Произошла неожиданная ошибка: {str(e)}"
-        return error_msg
-
+        return f"Произошла неожиданная ошибка: {str(e)}"
+        
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Привет! Я твоя виртуальная подруга Светлана. Давай общаться!")
 
