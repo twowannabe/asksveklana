@@ -1,44 +1,44 @@
-name: Deploy to Server
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.9'
-
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Test SSH connection
-        run: ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'echo SSH connection successful'
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-
-      - name: Copy files to server
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /root/repos/askgbt"
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" . ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/repos/askgbt
-
-      - name: Restart application on server
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-             systemctl stop askgbt; systemctl start askgbt
-          EOF
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
+# name: Deploy to Server
+#
+# on:
+#   push:
+#     branches:
+#       - main
+#
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v2
+#
+#       - name: Set up Python
+#         uses: actions/setup-python@v2
+#         with:
+#           python-version: '3.9'
+#
+#       - name: Start SSH agent
+#         uses: webfactory/ssh-agent@v0.5.3
+#         with:
+#           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+#
+#       - name: Test SSH connection
+#         run: ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'echo SSH connection successful'
+#         env:
+#           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+#           SERVER_USER: ${{ secrets.SERVER_USER }}
+#
+#       - name: Copy files to server
+#         run: |
+#           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p /root/repos/askgbt"
+#           rsync -avz -e "ssh -o StrictHostKeyChecking=no" . ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/repos/askgbt
+#
+#       - name: Restart application on server
+#         run: |
+#           ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+#              systemctl stop askgbt; systemctl start askgbt
+#           EOF
+#         env:
+#           SERVER_HOST: ${{ secrets.SERVER_HOST }}
+#           SERVER_USER: ${{ secrets.SERVER_USER }}
