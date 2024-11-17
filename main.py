@@ -21,12 +21,6 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from PIL import Image
-import io
-import pytesseract
-from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
-import torch
-from transformers import MarianMTModel, MarianTokenizer
 
 # Load configuration from .env file
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -64,20 +58,6 @@ user_personalities = defaultdict(str)
 
 # Default bot personality
 default_personality = "Ты Светлана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
-
-# Инициализация моделей для описания изображений и перевода
-model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-
-# Устройство (CPU или GPU)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-# Модель для перевода с английского на русский
-translation_model_name = 'Helsinki-NLP/opus-mt-en-ru'
-translation_tokenizer = MarianTokenizer.from_pretrained(translation_model_name)
-translation_model = MarianMTModel.from_pretrained(translation_model_name).to(device)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -313,20 +293,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Проверяем, упомянут ли бот в сообщении
     is_bot_mentioned = f'@{bot_username}' in message_text
 
-    # Проверяем, является ли сообщение ответом на другое сообщение
-    is_reply = update.message.reply_to_message is not None
-
     should_respond = False
     reply_to_message_id = None
     text_to_process = None
 
-    # Если бот упомянут в ответе на сообщение, используем текст из исходного сообщения
-    if is_reply and is_bot_mentioned:
-        original_message = update.message.reply_to_message.text or ""
-        text_to_process = original_message
-        should_respond = True
-        reply_to_message_id = update.message.message_id
-    elif is_bot_mentioned:
+    if is_bot_mentioned:
         should_respond = True
         text_to_process = message_text.replace(f'@{bot_username}', '').strip()
         reply_to_message_id = update.message.message_id
@@ -374,12 +345,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
-
-def translate_text(text):
-    tokens = translation_tokenizer([text], return_tensors='pt', padding=True).to(device)
-    translation = translation_model.generate(**tokens)
-    translated_text = translation_tokenizer.batch_decode(translation, skip_special_tokens=True)[0]
-    return translated_text
 
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
