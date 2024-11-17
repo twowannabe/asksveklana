@@ -249,40 +249,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     bot_id = context.bot.id
+    bot_username = context.bot.username
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
-    bot_username = context.bot.username
     message_text = update.message.text.strip() if update.message.text else ""
 
-    # Проверяем, упомянут ли бот в сообщении
+    # Определяем, упомянут ли бот в сообщении
     is_bot_mentioned = f'@{bot_username}' in message_text
-
     # Проверяем, является ли сообщение ответом на другое сообщение
     is_reply = update.message.reply_to_message is not None
-
     # Проверяем, является ли сообщение ответом на сообщение бота
     is_reply_to_bot = is_reply and update.message.reply_to_message.from_user.id == bot_id
 
     should_respond = False
-    reply_to_message_id = None
     text_to_process = None
+    reply_to_message_id = None
 
-    if is_bot_mentioned:
-        # Если бот упомянут, обрабатываем сообщение
+    if is_bot_mentioned and not is_reply:
+        # **Сценарий 1**: Бот упомянут в сообщении
         should_respond = True
+        # Удаляем упоминание бота из текста сообщения
         text_to_process = message_text.replace(f'@{bot_username}', '').strip()
         reply_to_message_id = update.message.message_id
+
     elif is_reply_to_bot:
-        # Если сообщение является ответом на сообщение бота, обрабатываем текст пользователя
+        # **Сценарий 2**: Сообщение является ответом на сообщение бота
         should_respond = True
-        text_to_process = message_text  # Используем текст сообщения пользователя
+        text_to_process = message_text
         reply_to_message_id = update.message.message_id
 
-    # Если бот включен в группе, но сообщение не является личным, проверяем статус бота в группе
+    elif is_reply and is_bot_mentioned:
+        # **Сценарий 3**: Сообщение является ответом на другое сообщение и упоминает бота
+        # Получаем текст оригинального сообщения
+        original_message = update.message.reply_to_message.text
+        if original_message:
+            should_respond = True
+            text_to_process = original_message
+            reply_to_message_id = update.message.message_id
+        else:
+            # Если оригинальное сообщение не содержит текст
+            await update.message.reply_text("Извините, я не могу прочитать сообщение, на которое вы ответили.")
+            return
+
+    # Проверяем, включён ли бот в группе
     if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
         return
 
-    # Если бот должен ответить и есть текст для обработки
+    # Обрабатываем сообщение, если должны ответить и есть текст для обработки
     if should_respond and text_to_process:
         personality = user_personalities.get(user_id, default_personality)
         initial_instructions = [
@@ -307,17 +320,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(escaped_reply) > max_length:
             escaped_reply = escaped_reply[:max_length]
 
-        if reply_to_message_id:
-            await update.message.reply_text(
-                escaped_reply,
-                parse_mode=ParseMode.MARKDOWN_V2,
-                reply_to_message_id=reply_to_message_id
-            )
-        else:
-            await update.message.reply_text(
-                escaped_reply,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+        await update.message.reply_text(
+            escaped_reply,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_to_message_id=reply_to_message_id
+        )
 
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
