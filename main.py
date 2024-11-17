@@ -10,6 +10,7 @@ from io import BytesIO
 from telegram.helpers import escape_markdown
 from decouple import config
 import openai
+from openai.error import RateLimitError, InvalidRequestError, OpenAIError
 import psycopg2
 from bs4 import BeautifulSoup
 from telegram import Update
@@ -131,7 +132,7 @@ async def ask_chatgpt(messages) -> str:
                 return "An error occurred: one of the messages was empty."
 
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
+            model="gpt-4",
             messages=messages_with_formatting,
             max_tokens=700,
             temperature=0.2,
@@ -142,17 +143,21 @@ async def ask_chatgpt(messages) -> str:
         logger.info(f"ChatGPT response: {answer}")
 
         return answer
-    except openai.error.RateLimitError:
+    except RateLimitError:
         error_msg = "Превышен лимит запросов к OpenAI API. Пожалуйста, попробуйте позже."
         logger.error(error_msg)
         return error_msg
-    except openai.error.InvalidRequestError as e:
+    except InvalidRequestError as e:
         error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
+    except OpenAIError as e:
+        error_msg = f"Ошибка OpenAI API: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
     except Exception as e:
-        logger.error("Error contacting ChatGPT", exc_info=True)
-        error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
+        logger.error("Unexpected error contacting ChatGPT", exc_info=True)
+        error_msg = f"Произошла неожиданная ошибка: {str(e)}"
         return error_msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
