@@ -128,7 +128,7 @@ async def ask_chatgpt(messages) -> str:
             model="o1-mini",
             messages=messages,
             max_completion_tokens=700,
-            temperature=0.2,
+            # temperature=0.2,
             n=1
         )
         answer = response.choices[0].message['content'].strip()
