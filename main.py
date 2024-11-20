@@ -21,6 +21,9 @@ import psycopg2
 from bs4 import BeautifulSoup
 from telegram.error import BadRequest
 
+# Вероятность случайного ответа (1 из 90)
+RANDOM_RESPONSE_CHANCE = 1 / 90
+
 # Загрузка конфигурации из файла .env
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
 OPENAI_API_KEY = config('OPENAI_API_KEY')
@@ -317,7 +320,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif is_reply and is_bot_mentioned:
         # Сценарий 3: Сообщение является ответом на другое сообщение и упоминает бота
-        # Получаем текст оригинального сообщения или подпись медиа-контента
         original_message = update.message.reply_to_message.text or update.message.reply_to_message.caption
         if original_message:
             should_respond = True
@@ -327,6 +329,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Если оригинальное сообщение не содержит текст или подпись
             await update.message.reply_text("Извините, я не могу обработать это сообщение, так как оно не содержит текста.")
             return
+
+    # Случайный ответ с вероятностью 1 из 90
+    if random.random() < RANDOM_RESPONSE_CHANCE and not should_respond:
+        should_respond = True
+        text_to_process = message_text
+        reply_to_message_id = update.message.message_id
 
     # Проверяем, включён ли бот в группе
     if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
