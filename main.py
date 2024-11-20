@@ -305,6 +305,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         try:
             reply = await ask_chatgpt(messages)
+            if not reply or reply.strip() == "":
+                logger.warning("Empty reply from OpenAI. Informing user.")
+                await update.message.reply_text("Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос.")
+                return
         except Exception as e:
             logger.error(f"Error contacting OpenAI: {e}")
             await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
