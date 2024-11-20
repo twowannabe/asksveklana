@@ -127,8 +127,7 @@ async def ask_chatgpt(messages) -> str:
         response = await openai.ChatCompletion.acreate(
             model="o1-mini",
             messages=messages,
-            max_completion_tokens=700,
-            # temperature=0.2,
+            max_tokens=700,
             n=1
         )
         answer = response.choices[0].message['content'].strip()
@@ -296,9 +295,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Формируем сообщения для отправки в API
         messages = []
 
-        # Добавляем личность и инструкции в первое сообщение пользователя
-        initial_message = f"{personality}\n{instructions}\n\n{conversation_context[user_id][0]['content']}"
-        messages.append({"role": "user", "content": initial_message})
+        # Включаем личность и инструкции в первое сообщение пользователя
+        initial_message_content = f"{personality}\n{instructions}\n\n{conversation_context[user_id][0]['content']}"
+        messages.append({"role": "user", "content": initial_message_content})
 
         # Добавляем остальные сообщения из контекста
         for message in conversation_context[user_id][1:]:
