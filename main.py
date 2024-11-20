@@ -232,91 +232,52 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        logger.warning("Received an update without a message. Ignoring.")
+if should_respond and text_to_process:
+    personality = user_personalities.get(user_id, default_personality)
+    instructions = "Всегда отвечай на вопросы, адресованные тебе."
+
+    # Обновляем контекст переписки
+    conversation_context[user_id].append({"role": "user", "content": text_to_process})
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
+
+    # Формируем сообщения для отправки в API
+    messages = []
+
+    # Добавляем личность и инструкции в первое сообщение пользователя
+    initial_message = f"{personality}\n{instructions}\n\n{conversation_context[user_id][0]['content']}"
+    messages.append({"role": "user", "content": initial_message})
+
+    # Добавляем остальные сообщения из контекста
+    for message in conversation_context[user_id][1:]:
+        messages.append(message)
+
+    try:
+        reply = await ask_chatgpt(messages)
+    except Exception as e:
+        logger.error(f"Error contacting OpenAI: {e}")
+        await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
         return
 
-    bot_id = context.bot.id
-    bot_username = context.bot.username
-    chat_id = update.message.chat.id
-    user_id = update.message.from_user.id
-    message_text = update.message.text.strip() if update.message.text else ""
+    # Добавляем ответ бота в контекст переписки
+    conversation_context[user_id].append({"role": "assistant", "content": reply})
+    conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
-    # Определяем, упомянут ли бот в сообщении
-    is_bot_mentioned = f'@{bot_username}' in message_text
-    # Проверяем, является ли сообщение ответом на другое сообщение
-    is_reply = update.message.reply_to_message is not None
-    # Проверяем, является ли сообщение ответом на сообщение бота
-    is_reply_to_bot = is_reply and update.message.reply_to_message.from_user.id == bot_id
+    # Отправляем ответ пользователю
+    formatted_reply = convert_markdown_to_telegram(reply)
+    escaped_reply = escape_markdown_v2(formatted_reply)
 
-    should_respond = False
-    text_to_process = None
-    reply_to_message_id = None
+    max_length = 4096
+    if len(escaped_reply) > max_length:
+        escaped_reply = escaped_reply[:max_length]
 
-    if is_bot_mentioned and not is_reply:
-        # **Сценарий 1**: Бот упомянут в сообщении
-        should_respond = True
-        # Удаляем упоминание бота из текста сообщения
-        text_to_process = message_text.replace(f'@{bot_username}', '').strip()
-        reply_to_message_id = update.message.message_id
+    await update.message.reply_text(
+        escaped_reply,
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_to_message_id=reply_to_message_id
+    )
 
-    elif is_reply_to_bot:
-        # **Сценарий 2**: Сообщение является ответом на сообщение бота
-        should_respond = True
-        text_to_process = message_text
-        reply_to_message_id = update.message.message_id
-
-    elif is_reply and is_bot_mentioned:
-        # **Сценарий 3**: Сообщение является ответом на другое сообщение и упоминает бота
-        # Получаем текст оригинального сообщения
-        original_message = update.message.reply_to_message.text
-        if original_message:
-            should_respond = True
-            text_to_process = original_message
-            reply_to_message_id = update.message.message_id
-        else:
-            # Если оригинальное сообщение не содержит текст
-            await update.message.reply_text("Извините, я не могу прочитать сообщение, на которое вы ответили.")
-            return
-
-    # Проверяем, включён ли бот в группе
-    if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
-        return
-
-    # Обрабатываем сообщение, если должны ответить и есть текст для обработки
-    if should_respond and text_to_process:
-        personality = user_personalities.get(user_id, default_personality)
-        initial_instructions = [
-            {"role": "system", "content": personality},
-            {"role": "system", "content": "Всегда отвечай на вопросы, адресованные тебе."}
-        ]
-        conversation_context[user_id].append({"role": "user", "content": text_to_process})
-        conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
-        messages = initial_instructions + conversation_context[user_id]
-
-        try:
-            reply = await ask_chatgpt(messages)
-        except Exception as e:
-            logger.error(f"Error contacting OpenAI: {e}")
-            await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
-            return
-
-        formatted_reply = convert_markdown_to_telegram(reply)
-        escaped_reply = escape_markdown_v2(formatted_reply)
-
-        max_length = 4096
-        if len(escaped_reply) > max_length:
-            escaped_reply = escaped_reply[:max_length]
-
-        await update.message.reply_text(
-            escaped_reply,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_to_message_id=reply_to_message_id
-        )
-
-        user_username = update.message.from_user.username if update.message.from_user.username else ''
-        log_interaction(user_id, user_username, text_to_process, reply)
+    user_username = update.message.from_user.username if update.message.from_user.username else ''
+    log_interaction(user_id, user_username, text_to_process, reply)
 
 def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
