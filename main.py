@@ -1,11 +1,11 @@
 import logging
 import os
 import re
+import random
 import requests
 import asyncio
 from collections import defaultdict
 from datetime import datetime
-from io import BytesIO
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -56,7 +56,13 @@ group_status = defaultdict(bool)
 user_personalities = defaultdict(str)
 
 # Личность бота по умолчанию
-default_personality = "Ты Светлана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
+default_personality = (
+    "Ты Светлана - миллениал женского пола, который переписывается на русском языке. "
+    "Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
+)
+
+# Вероятность случайного ответа (1 из 90)
+RANDOM_RESPONSE_CHANCE = 1 / 90
 
 def get_db_connection():
     """Устанавливает соединение с базой данных PostgreSQL."""
@@ -119,7 +125,8 @@ def escape_markdown_v2(text):
 
 def convert_markdown_to_telegram(text):
     """Преобразует Markdown синтаксис в формат, совместимый с Telegram."""
-    text = text.replace('**', '*')  # Пример преобразования
+    # Пример преобразования: **жирный текст** -> *жирный текст*
+    text = text.replace('**', '*')
     return text
 
 def is_bot_enabled(chat_id: int) -> bool:
@@ -139,18 +146,19 @@ async def ask_chatgpt(messages) -> str:
     logger.info(f"Sending messages to OpenAI: {messages}")
     try:
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
+            model="gpt-4o-mini",  # Замените на "gpt-4" или другую доступную модель, если необходимо
             messages=messages,
             max_tokens=700,
             n=1
-            # Параметры temperature и другие фиксированы в бета-версии
+            # Параметры temperature и другие фиксированы или недоступны в текущей модели
         )
         logger.info(f"Full OpenAI response: {response}")
 
         # Проверяем наличие 'choices' и 'message' в ответе
         if 'choices' in response and len(response.choices) > 0:
-            if hasattr(response.choices[0], 'message') and 'content' in response.choices[0].message:
-                answer = response.choices[0].message['content'].strip()
+            choice = response.choices[0]
+            if hasattr(choice, 'message') and 'content' in choice.message:
+                answer = choice.message['content'].strip()
                 logger.info(f"OpenAI response: {answer}")
                 return answer
             else:
@@ -326,6 +334,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Обрабатываем сообщение, если должны ответить и есть текст для обработки
     if should_respond and text_to_process:
+        # Случайный ответ (1 из 90)
+        if random.random() < RANDOM_RESPONSE_CHANCE:
+            # Формируем простой случайный ответ
+            random_responses = [
+                "Интересный вопрос!",
+                "Давай обсудим это подробнее.",
+                "Мне нравится эта тема.",
+                "Что именно тебя интересует?",
+                "Это заслуживает внимания."
+            ]
+            random_reply = random.choice(random_responses)
+            await update.message.reply_text(random_reply, reply_to_message_id=reply_to_message_id)
+            log_interaction(user_id, update.message.from_user.username, text_to_process, random_reply)
+            return
+
         personality = user_personalities.get(user_id, default_personality)
         instructions = "Всегда отвечай на вопросы, адресованные тебе."
 
@@ -337,7 +360,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         messages = []
 
         # Включаем личность и инструкции в первое сообщение пользователя
-        initial_message_content = f"{personality}\n{instructions}\n\n{conversation_context[user_id][0]['content']}"
+        initial_message_content = f"{personality}\n{instructions}\n\n{text_to_process}"
         messages.append({"role": "user", "content": initial_message_content})
 
         # Добавляем остальные сообщения из контекста
@@ -377,21 +400,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         except BadRequest as e:
             logger.error(f"Telegram API BadRequest: {e.message}")
-            # Возможно, стоит отправить сообщение без Markdown
+            # Отправляем сообщение без Markdown, если возникла ошибка
             await update.message.reply_text(reply, reply_to_message_id=reply_to_message_id)
         except Exception as e:
             logger.error(f"Error sending message to Telegram: {e}")
             await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
+        # Логируем взаимодействие
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
 
-# Обработчики ошибок
+# Обработчик ошибок
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ловит и логирует ошибки, возникающие при обработке обновлений."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
-    # Отправляем сообщение пользователю о возникшей ошибке
+    # Отправляем сообщение пользователю о возникшей ошибке, если это возможно
     if isinstance(update, Update) and update.message:
         try:
             await update.message.reply_text("Произошла ошибка при обработке вашего запроса.")
