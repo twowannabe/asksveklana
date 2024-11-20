@@ -283,7 +283,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает текстовые сообщения от пользователей."""
     if update.message is None:
-        logger.warning("Received an update without a message. Ignoring.")
+        logger.warning("Получено обновление без сообщения. Игнорируем.")
         return
 
     bot_username = context.bot.username
@@ -317,15 +317,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif is_reply and is_bot_mentioned:
         # Сценарий 3: Сообщение является ответом на другое сообщение и упоминает бота
-        # Получаем текст оригинального сообщения
-        original_message = update.message.reply_to_message.text
+        # Получаем текст оригинального сообщения или подпись медиа-контента
+        original_message = update.message.reply_to_message.text or update.message.reply_to_message.caption
         if original_message:
             should_respond = True
             text_to_process = original_message
             reply_to_message_id = update.message.message_id
         else:
-            # Если оригинальное сообщение не содержит текст
-            await update.message.reply_text("Извините, я не могу прочитать сообщение, на которое вы ответили.")
+            # Если оригинальное сообщение не содержит текст или подпись
+            await update.message.reply_text("Извините, я не могу обработать это сообщение, так как оно не содержит текста.")
             return
 
     # Проверяем, включён ли бот в группе
@@ -334,21 +334,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Обрабатываем сообщение, если должны ответить и есть текст для обработки
     if should_respond and text_to_process:
-        # Случайный ответ (1 из 90)
-        if random.random() < RANDOM_RESPONSE_CHANCE:
-            # Формируем простой случайный ответ
-            random_responses = [
-                "Интересный вопрос!",
-                "Давай обсудим это подробнее.",
-                "Мне нравится эта тема.",
-                "Что именно тебя интересует?",
-                "Это заслуживает внимания."
-            ]
-            random_reply = random.choice(random_responses)
-            await update.message.reply_text(random_reply, reply_to_message_id=reply_to_message_id)
-            log_interaction(user_id, update.message.from_user.username, text_to_process, random_reply)
-            return
-
         personality = user_personalities.get(user_id, default_personality)
         instructions = "Всегда отвечай на вопросы, адресованные тебе."
 
@@ -357,26 +342,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
         # Формируем сообщения для отправки в API
-        messages = []
-
-        # Включаем личность и инструкции в первое сообщение пользователя
-        initial_message_content = f"{personality}\n{instructions}\n\n{text_to_process}"
-        messages.append({"role": "user", "content": initial_message_content})
-
-        # Добавляем остальные сообщения из контекста
-        for message in conversation_context[user_id][1:]:
-            messages.append(message)
+        messages = [
+            {"role": "system", "content": f"{personality}\n{instructions}"},
+            *conversation_context[user_id]
+        ]
 
         try:
             reply = await ask_chatgpt(messages)
         except Exception as e:
-            logger.error(f"Error contacting OpenAI: {e}")
-            await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
+            logger.error(f"Ошибка при обращении к OpenAI: {e}")
+            await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте ещё раз.")
             return
 
         # Проверяем, не пустой ли ответ
         if not reply or reply.strip() == "":
-            logger.warning("Empty reply from OpenAI. Informing user.")
+            logger.warning("Пустой ответ от OpenAI. Информируем пользователя.")
             await update.message.reply_text("Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос.")
             return
 
@@ -399,11 +379,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_to_message_id=reply_to_message_id
             )
         except BadRequest as e:
-            logger.error(f"Telegram API BadRequest: {e.message}")
+            logger.error(f"Ошибка Telegram API: {e.message}")
             # Отправляем сообщение без Markdown, если возникла ошибка
             await update.message.reply_text(reply, reply_to_message_id=reply_to_message_id)
         except Exception as e:
-            logger.error(f"Error sending message to Telegram: {e}")
+            logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
             await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
         # Логируем взаимодействие
