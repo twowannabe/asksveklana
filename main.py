@@ -119,31 +119,24 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         logger.error(f"Error writing to database: {str(e)}")
 
 async def ask_chatgpt(messages) -> str:
-    logger.info(f"Sending messages to ChatGPT: {messages}")
+    logger.info(f"Sending messages to OpenAI: {messages}")
     try:
-        messages_with_formatting = [
-            {"role": "system", "content": "Keep responses concise and no more than 3500 characters."}
-        ] + messages
-
-        for message in messages_with_formatting:
-            if not message.get("content"):
-                logger.error(f"Empty content in message: {message}")
-                return "An error occurred: one of the messages was empty."
-
         response = await openai.ChatCompletion.acreate(
             model="o1-mini",
-            messages=messages_with_formatting,
+            messages=messages,
             max_tokens=700,
             temperature=0.2,
             n=1
         )
-
         answer = response.choices[0].message['content'].strip()
-        logger.info(f"ChatGPT response: {answer}")
-
+        logger.info(f"OpenAI response: {answer}")
         return answer
+    except openai.error.InvalidRequestError as e:
+        error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
     except openai.OpenAIError as e:
-        error_msg = f"Ошибка при обращении к OpenAI API: {str(e)}"
+        error_msg = f"Ошибка OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
     except Exception as e:
