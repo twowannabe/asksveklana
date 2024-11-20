@@ -1,17 +1,11 @@
 import logging
 import os
-import random
 import re
 import requests
 import asyncio
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
-from telegram.helpers import escape_markdown
-from decouple import config
-import openai
-import psycopg2
-from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -21,6 +15,11 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+from decouple import config
+import openai
+import psycopg2
+from bs4 import BeautifulSoup
+from telegram.error import BadRequest
 
 # Загрузка конфигурации из файла .env
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -60,6 +59,7 @@ user_personalities = defaultdict(str)
 default_personality = "Ты Светлана - миллениал женского пола, который переписывается на русском языке. Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 
 def get_db_connection():
+    """Устанавливает соединение с базой данных PostgreSQL."""
     return psycopg2.connect(
         dbname=DB_NAME,
         user=DB_USER,
@@ -69,6 +69,7 @@ def get_db_connection():
     )
 
 def init_db():
+    """Инициализирует таблицы базы данных, если они не существуют."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -96,6 +97,7 @@ def init_db():
         logger.error(f"Error initializing database: {str(e)}")
 
 def log_interaction(user_id, user_username, user_message, gpt_reply):
+    """Логирует взаимодействие пользователя с ботом в базу данных."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -111,45 +113,72 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         logger.error(f"Error writing to database: {str(e)}")
 
 def escape_markdown_v2(text):
+    """Экранирует специальные символы для Markdown V2."""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 def convert_markdown_to_telegram(text):
-    text = text.replace('**', '*')
+    """Преобразует Markdown синтаксис в формат, совместимый с Telegram."""
+    text = text.replace('**', '*')  # Пример преобразования
     return text
 
 def is_bot_enabled(chat_id: int) -> bool:
+    """Проверяет, включён ли бот в данной группе."""
     return group_status.get(chat_id, False)
 
 async def ask_chatgpt(messages) -> str:
+    """
+    Отправляет сообщения к OpenAI API и возвращает ответ.
+
+    Args:
+        messages (list): Список сообщений в формате Chat API.
+
+    Returns:
+        str: Ответ от модели или None в случае ошибки.
+    """
     logger.info(f"Sending messages to OpenAI: {messages}")
     try:
         response = await openai.ChatCompletion.acreate(
-            model="o1-mini",
+            model="gpt-4o-mini",
             messages=messages,
-            max_completion_tokens=700,
+            max_tokens=700,
             n=1
+            # Параметры temperature и другие фиксированы в бета-версии
         )
-        answer = response.choices[0].message['content'].strip()
-        logger.info(f"OpenAI response: {answer}")
-        return answer
+        logger.info(f"Full OpenAI response: {response}")
+
+        # Проверяем наличие 'choices' и 'message' в ответе
+        if 'choices' in response and len(response.choices) > 0:
+            if hasattr(response.choices[0], 'message') and 'content' in response.choices[0].message:
+                answer = response.choices[0].message['content'].strip()
+                logger.info(f"OpenAI response: {answer}")
+                return answer
+            else:
+                logger.warning("No 'content' in the first choice's message.")
+                return None
+        else:
+            logger.warning("No choices returned in the OpenAI response.")
+            return None
     except openai.error.InvalidRequestError as e:
         error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
         logger.error(error_msg)
-        return error_msg
+        return None
     except openai.OpenAIError as e:
         error_msg = f"Ошибка OpenAI API: {str(e)}"
         logger.error(error_msg)
-        return error_msg
+        return None
     except Exception as e:
         logger.error("Неизвестная ошибка при обращении к OpenAI", exc_info=True)
-        error_msg = f"Неизвестная ошибка: {str(e)}"
-        return error_msg
+        return None
+
+# Обработчики команд
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает команду /start."""
     await update.message.reply_text("Привет! Я твоя виртуальная подруга Светлана. Давай общаться!")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает команду /help."""
     help_text = (
         "Доступные команды:\n"
         "/start - Начать беседу\n"
@@ -163,10 +192,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(help_text)
 
 async def is_user_admin(update: Update) -> bool:
-    user_status = await update.effective_chat.get_member(update.effective_user.id)
-    return user_status.status in ['administrator', 'creator']
+    """Проверяет, является ли пользователь администратором."""
+    try:
+        user_status = await update.effective_chat.get_member(update.effective_user.id)
+        return user_status.status in ['administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking admin status: {str(e)}")
+        return False
 
 async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Включает бота в группе (только для администраторов)."""
     chat_id = update.message.chat.id
     if await is_user_admin(update):
         group_status[chat_id] = True
@@ -175,6 +210,7 @@ async def enable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Только администраторы могут выполнять эту команду.")
 
 async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отключает бота в группе (только для администраторов)."""
     chat_id = update.message.chat.id
     if await is_user_admin(update):
         group_status[chat_id] = False
@@ -183,11 +219,13 @@ async def disable_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Только администраторы могут выполнять эту команду.")
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Сбрасывает историю диалога пользователя."""
     user_id = update.message.from_user.id
     conversation_context[user_id] = []
     await update.message.reply_text("История диалога сброшена.")
 
 async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Устанавливает личность бота для пользователя."""
     personality = ' '.join(context.args)
     if not personality:
         await update.message.reply_text("Пожалуйста, предоставьте описание личности после команды /set_personality.")
@@ -200,8 +238,8 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         cursor.execute('''
         INSERT INTO user_personalities (user_id, personality)
         VALUES (%s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET personality = %s
-        ''', (user_id, personality, personality))
+        ON CONFLICT (user_id) DO UPDATE SET personality = EXCLUDED.personality
+        ''', (user_id, personality))
         conn.commit()
         cursor.close()
         conn.close()
@@ -210,6 +248,7 @@ async def set_personality(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(f"Личность бота установлена: {personality}")
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет последние новости из RSS-ленты."""
     try:
         response = requests.get(NEWS_RSS_URL)
         response.raise_for_status()
@@ -231,12 +270,14 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
+# Обработчик сообщений
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает текстовые сообщения от пользователей."""
     if update.message is None:
         logger.warning("Received an update without a message. Ignoring.")
         return
 
-    bot_id = context.bot.id
     bot_username = context.bot.username
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
@@ -247,7 +288,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Проверяем, является ли сообщение ответом на другое сообщение
     is_reply = update.message.reply_to_message is not None
     # Проверяем, является ли сообщение ответом на сообщение бота
-    is_reply_to_bot = is_reply and update.message.reply_to_message.from_user.id == bot_id
+    is_reply_to_bot = is_reply and update.message.reply_to_message.from_user.id == context.bot.id
 
     should_respond = False
     text_to_process = None
@@ -305,13 +346,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         try:
             reply = await ask_chatgpt(messages)
-            if not reply or reply.strip() == "":
-                logger.warning("Empty reply from OpenAI. Informing user.")
-                await update.message.reply_text("Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос.")
-                return
         except Exception as e:
             logger.error(f"Error contacting OpenAI: {e}")
             await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте еще раз.")
+            return
+
+        # Проверяем, не пустой ли ответ
+        if not reply or reply.strip() == "":
+            logger.warning("Empty reply from OpenAI. Informing user.")
+            await update.message.reply_text("Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос.")
             return
 
         # Добавляем ответ бота в контекст переписки
@@ -326,16 +369,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(escaped_reply) > max_length:
             escaped_reply = escaped_reply[:max_length]
 
-        await update.message.reply_text(
-            escaped_reply,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_to_message_id=reply_to_message_id
-        )
+        try:
+            await update.message.reply_text(
+                escaped_reply,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_to_message_id=reply_to_message_id
+            )
+        except BadRequest as e:
+            logger.error(f"Telegram API BadRequest: {e.message}")
+            # Возможно, стоит отправить сообщение без Markdown
+            await update.message.reply_text(reply, reply_to_message_id=reply_to_message_id)
+        except Exception as e:
+            logger.error(f"Error sending message to Telegram: {e}")
+            await update.message.reply_text("Произошла ошибка при отправке сообщения.")
 
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
 
+# Обработчики ошибок
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ловит и логирует ошибки, возникающие при обработке обновлений."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    # Отправляем сообщение пользователю о возникшей ошибке
+    if isinstance(update, Update) and update.message:
+        try:
+            await update.message.reply_text("Произошла ошибка при обработке вашего запроса.")
+        except Exception as e:
+            logger.error(f"Failed to send error message to user: {e}")
+
+# Основная функция
+
 def main():
+    """Запускает Telegram бота."""
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Инициализация базы данных
@@ -349,9 +415,15 @@ def main():
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("set_personality", set_personality))
     application.add_handler(CommandHandler("news", news_command))
+
+    # Добавляем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Добавляем обработчик ошибок
+    application.add_error_handler(error_handler)
+
     # Запускаем бота
+    logger.info("Starting the bot...")
     application.run_polling()
 
 if __name__ == '__main__':
