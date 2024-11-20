@@ -131,7 +131,7 @@ async def ask_chatgpt(messages) -> str:
                 return "An error occurred: one of the messages was empty."
 
         response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
+            model="o1-mini",
             messages=messages_with_formatting,
             max_tokens=700,
             temperature=0.2,
@@ -142,17 +142,13 @@ async def ask_chatgpt(messages) -> str:
         logger.info(f"ChatGPT response: {answer}")
 
         return answer
-    except openai.error.RateLimitError:
-        error_msg = "Превышен лимит запросов к OpenAI API. Пожалуйста, попробуйте позже."
-        logger.error(error_msg)
-        return error_msg
-    except openai.error.InvalidRequestError as e:
-        error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
+    except openai.OpenAIError as e:
+        error_msg = f"Ошибка при обращении к OpenAI API: {str(e)}"
         logger.error(error_msg)
         return error_msg
     except Exception as e:
-        logger.error("Error contacting ChatGPT", exc_info=True)
-        error_msg = f"Ошибка при обращении к ChatGPT: {str(e)}"
+        logger.error("Неизвестная ошибка при обращении к OpenAI", exc_info=True)
+        error_msg = f"Неизвестная ошибка: {str(e)}"
         return error_msg
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
