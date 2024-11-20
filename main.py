@@ -127,7 +127,7 @@ async def ask_chatgpt(messages) -> str:
         response = await openai.ChatCompletion.acreate(
             model="o1-mini",
             messages=messages,
-            max_tokens=700,
+            max_completion_tokens=700,
             temperature=0.2,
             n=1
         )
