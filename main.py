@@ -373,8 +373,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
         # Отправляем ответ пользователю
-        formatted_reply = convert_markdown_to_telegram(reply)
-        escaped_reply = escape_markdown_v2(formatted_reply)
+        # formatted_reply = convert_markdown_to_telegram(reply)
+        escaped_reply = escape_markdown_v2(reply)
 
         max_length = 4096
         if len(escaped_reply) > max_length:
