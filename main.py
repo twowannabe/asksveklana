@@ -123,7 +123,7 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
 
 def escape_markdown_v2(text):
     """Экранирует специальные символы для Markdown V2."""
-    escape_chars = r'_*[]()~>#+-=|{}.!'
+    escape_chars = r'_[]()~>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 # def convert_markdown_to_telegram(text):
