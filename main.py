@@ -126,11 +126,11 @@ def escape_markdown_v2(text):
     escape_chars = r'_*[]()~>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-def convert_markdown_to_telegram(text):
-    """Преобразует Markdown синтаксис в формат, совместимый с Telegram."""
-    # Пример преобразования: **жирный текст** -> *жирный текст*
-    text = text.replace('**', '*')
-    return text
+# def convert_markdown_to_telegram(text):
+#     """Преобразует Markdown синтаксис в формат, совместимый с Telegram."""
+#     # Пример преобразования: **жирный текст** -> *жирный текст*
+#     text = text.replace('**', '*')
+#     return text
 
 def is_bot_enabled(chat_id: int) -> bool:
     """Проверяет, включён ли бот в данной группе."""
@@ -373,7 +373,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
         # Отправляем ответ пользователю
-        formatted_reply = convert_markdown_to_telegram(reply)
+        # formatted_reply = convert_markdown_to_telegram(reply)
         escaped_reply = escape_markdown_v2(reply)
 
         max_length = 4096
