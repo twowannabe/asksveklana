@@ -304,6 +304,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     should_respond = False
     text_to_process = None
     reply_to_message_id = None
+    is_random_response = False  # Флаг для случайной реакции
 
     if is_bot_mentioned and not is_reply:
         # Сценарий 1: Бот упомянут в сообщении
@@ -335,6 +336,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         should_respond = True
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
+        is_random_response = True  # Устанавливаем флаг случайной реакции
 
     # Проверяем, включён ли бот в группе
     if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
@@ -342,6 +344,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Обрабатываем сообщение, если должны ответить и есть текст для обработки
     if should_respond and text_to_process:
+        if is_random_response:
+            # Реакция на случайный срабатывание
+            # Выбираем случайный вариант ответа
+            random_choice = random.choice(['audio', 'text'])
+            if random_choice == 'audio':
+                audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice.ogg')
+                if os.path.exists(audio_path):
+                    try:
+                        with open(audio_path, 'rb') as audio_file:
+                            await update.message.reply_voice(
+                                voice=audio_file,
+                                reply_to_message_id=reply_to_message_id
+                            )
+                        logger.info("Отправлен аудиофайл inna_voice.ogg")
+                        # Логируем взаимодействие
+                        user_username = update.message.from_user.username if update.message.from_user.username else ''
+                        log_interaction(user_id, user_username, text_to_process, "Отправлен аудиофайл inna_voice.ogg")
+                    except TelegramError as e:
+                        logger.error(f"Ошибка при отправке аудиофайла: {e}")
+                        await update.message.reply_text("Произошла ошибка при отправке аудиофайла.", reply_to_message_id=reply_to_message_id)
+                else:
+                    logger.error(f"Аудиофайл {audio_path} не найден.")
+                    await update.message.reply_text("Извините, аудиофайл не найден.", reply_to_message_id=reply_to_message_id)
+            else:
+                # Отправка текстового сообщения
+                random_text = "А тебе какая разница?"
+                try:
+                    await update.message.reply_text(
+                        random_text,
+                        reply_to_message_id=reply_to_message_id
+                    )
+                    logger.info("Отправлено случайное текстовое сообщение: 'А тебе какая разница?'")
+                    # Логируем взаимодействие
+                    user_username = update.message.from_user.username if update.message.from_user.username else ''
+                    log_interaction(user_id, user_username, text_to_process, random_text)
+                except Exception as e:
+                    logger.error(f"Ошибка при отправке случайного текстового сообщения: {e}")
+                    await update.message.reply_text("Произошла ошибка при отправке сообщения.", reply_to_message_id=reply_to_message_id)
+            return  # Выходим, так как случайная реакция уже выполнена
+
+        # Обычный ответ через OpenAI
         personality = user_personalities.get(user_id, default_personality)
         instructions = "Всегда отвечай на вопросы, адресованные тебе."
 
@@ -373,7 +416,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
         # Отправляем ответ пользователю
-        # formatted_reply = convert_markdown_to_telegram(reply)
         escaped_reply = escape_markdown_v2(reply)
 
         max_length = 4096
