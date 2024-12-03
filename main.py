@@ -143,7 +143,7 @@ async def ask_chatgpt(messages) -> str:
             openai.ChatCompletion.acreate(
                 model="o1-mini",
                 messages=messages,
-                max_tokens=700,
+                # max_tokens=700,
                 n=1
                 # Параметры temperature и другие фиксированы или недоступны в текущей модели
             ),
