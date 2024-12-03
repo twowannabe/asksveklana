@@ -19,7 +19,7 @@ from decouple import config
 import openai
 import psycopg2
 from bs4 import BeautifulSoup
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 
 # Вероятность случайного ответа (1 из 90)
 RANDOM_RESPONSE_CHANCE = 1 / 90
@@ -63,9 +63,6 @@ default_personality = (
     "Ты Светлана - миллениал женского пола, который переписывается на русском языке. "
     "Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
 )
-
-# Вероятность случайного ответа (1 из 90)
-RANDOM_RESPONSE_CHANCE = 1 / 90
 
 def get_db_connection():
     """Устанавливает соединение с базой данных PostgreSQL."""
@@ -126,12 +123,6 @@ def escape_markdown_v2(text):
     escape_chars = r'_[]()~>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-# def convert_markdown_to_telegram(text):
-#     """Преобразует Markdown синтаксис в формат, совместимый с Telegram."""
-#     # Пример преобразования: **жирный текст** -> *жирный текст*
-#     text = text.replace('**', '*')
-#     return text
-
 def is_bot_enabled(chat_id: int) -> bool:
     """Проверяет, включён ли бот в данной группе."""
     return group_status.get(chat_id, False)
@@ -144,16 +135,19 @@ async def ask_chatgpt(messages) -> str:
         messages (list): Список сообщений в формате Chat API.
 
     Returns:
-        str: Ответ от модели или None в случае ошибки.
+        str: Ответ от модели или сообщение об ошибке.
     """
     logger.info(f"Sending messages to OpenAI: {messages}")
     try:
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",  # Замените на "gpt-4" или другую доступную модель, если необходимо
-            messages=messages,
-            max_tokens=700,
-            n=1
-            # Параметры temperature и другие фиксированы или недоступны в текущей модели
+        response = await asyncio.wait_for(
+            openai.ChatCompletion.acreate(
+                model="o1-mini",
+                messages=messages,
+                max_tokens=700,
+                n=1
+                # Параметры temperature и другие фиксированы или недоступны в текущей модели
+            ),
+            timeout=120  # Устанавливаем таймаут в 120 секунд
         )
         logger.info(f"Full OpenAI response: {response}")
 
@@ -170,6 +164,9 @@ async def ask_chatgpt(messages) -> str:
         else:
             logger.warning("No choices returned in the OpenAI response.")
             return None
+    except asyncio.TimeoutError:
+        logger.error("Запрос к OpenAI превысил лимит времени")
+        return "Извините, я не смог ответить на ваш запрос вовремя. Пожалуйста, попробуйте еще раз."
     except openai.error.InvalidRequestError as e:
         error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
         logger.error(error_msg)
@@ -388,15 +385,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         personality = user_personalities.get(user_id, default_personality)
         instructions = "Всегда отвечай на вопросы, адресованные тебе."
 
+        # Объединяем личность, инструкции и текст сообщения пользователя
+        if not conversation_context[user_id]:
+            combined_user_message = f"{personality}\n{instructions}\nПользователь: {text_to_process}"
+        else:
+            combined_user_message = text_to_process
+
         # Обновляем контекст переписки
-        conversation_context[user_id].append({"role": "user", "content": text_to_process})
+        conversation_context[user_id].append({"role": "user", "content": combined_user_message})
         conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
 
         # Формируем сообщения для отправки в API
-        messages = [
-            {"role": "system", "content": f"{personality}\n{instructions}"},
-            *conversation_context[user_id]
-        ]
+        messages = conversation_context[user_id]
 
         try:
             reply = await ask_chatgpt(messages)
