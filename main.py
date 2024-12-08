@@ -61,7 +61,8 @@ user_personalities = defaultdict(str)
 # Личность бота по умолчанию
 default_personality = (
     "Ты Светлана - миллениал женского пола, который переписывается на русском языке. "
-    "Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации."
+    "Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации. "
+    "Отвечай кратко и понятно, избегай длинных и сложных предложений."
 )
 
 def get_db_connection():
@@ -386,7 +387,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Объединяем личность, инструкции и текст сообщения пользователя
         if not conversation_context[user_id]:
-            combined_user_message = f"{personality}\n{instructions}\nПользователь: {text_to_process}"
+            combined_user_message = (
+                f"{personality}\n"
+                "Отвечай кратко и по существу.\n"
+                f"Пользователь: {text_to_process}"
+            )
         else:
             combined_user_message = text_to_process
 
