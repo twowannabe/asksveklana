@@ -145,7 +145,6 @@ async def ask_chatgpt(messages) -> str:
                 messages=messages,
                 max_completion_tokens=5000,
                 n=1
-                # Параметры temperature и другие фиксированы или недоступны в текущей модели
             ),
             timeout=120  # Устанавливаем таймаут в 120 секунд
         )
