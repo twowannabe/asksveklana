@@ -354,7 +354,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         with open(audio_path, 'rb') as audio_file:
                             await update.message.reply_voice(
                                 voice=audio_file,
-                                timeout=60,
                                 reply_to_message_id=reply_to_message_id
                             )
                         logger.info("Отправлен аудиофайл inna_voice.ogg")
