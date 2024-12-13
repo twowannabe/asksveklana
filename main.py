@@ -7,7 +7,7 @@ import asyncio
 from collections import defaultdict
 from datetime import datetime
 from telegram import Update
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -349,9 +349,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice.ogg')
                 if os.path.exists(audio_path):
                     try:
+                        # Попробуйте сначала отправить действие "record_voice" чтобы проверить работу
+                        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.RECORD_VOICE)
                         with open(audio_path, 'rb') as audio_file:
                             await update.message.reply_voice(
                                 voice=audio_file,
+                                timeout=60,
                                 reply_to_message_id=reply_to_message_id
                             )
                         logger.info("Отправлен аудиофайл inna_voice.ogg")
@@ -460,7 +463,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main():
     """Запускает Telegram бота."""
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).read_timeout(60).build()
 
     # Инициализация базы данных
     init_db()
