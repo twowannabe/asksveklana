@@ -349,15 +349,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice.ogg')
                 if os.path.exists(audio_path):
                     try:
-                        # Попробуйте сначала отправить действие "record_voice" чтобы проверить работу
-                        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.RECORD_VOICE)
                         with open(audio_path, 'rb') as audio_file:
                             await update.message.reply_voice(
                                 voice=audio_file,
                                 reply_to_message_id=reply_to_message_id
                             )
                         logger.info("Отправлен аудиофайл inna_voice.ogg")
-                        # Логируем взаимодействие
+                        # Логирование взаимодействия
                         user_username = update.message.from_user.username if update.message.from_user.username else ''
                         log_interaction(user_id, user_username, text_to_process, "Отправлен аудиофайл inna_voice.ogg")
                     except TelegramError as e:
