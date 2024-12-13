@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 from telegram.error import BadRequest, TelegramError
 
 # Вероятность случайного ответа (1 из 90)
-RANDOM_RESPONSE_CHANCE = 1 / 90
+RANDOM_RESPONSE_CHANCE = 1 / 10
 
 # Загрузка конфигурации из файла .env
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
