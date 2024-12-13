@@ -346,7 +346,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Выбираем случайный вариант ответа
             random_choice = random.choice(['audio', 'text'])
             if random_choice == 'audio':
-                audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice.ogg')
+                audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice_2.ogg')
                 if os.path.exists(audio_path):
                     try:
                         with open(audio_path, 'rb') as audio_file:
