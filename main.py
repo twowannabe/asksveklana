@@ -342,11 +342,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Обрабатываем сообщение, если должны ответить и есть текст для обработки
     if should_respond and text_to_process:
         if is_random_response:
-            # Реакция на случайный срабатывание
+            # Реакция на случайное срабатывание
             # Выбираем случайный вариант ответа
             random_choice = random.choice(['audio', 'text'])
             if random_choice == 'audio':
-                audio_path = os.path.join(os.path.dirname(__file__), 'inna_voice_2.ogg')
+                # Выбираем случайный аудиофайл из трех вариантов
+                random_audio_files = ['inna_voice_2.ogg', 'inna_voice_3.ogg', 'inna_voice_4.ogg']
+                chosen_audio_file = random.choice(random_audio_files)
+                audio_path = os.path.join(os.path.dirname(__file__), chosen_audio_file)
+
                 if os.path.exists(audio_path):
                     try:
                         with open(audio_path, 'rb') as audio_file:
@@ -354,10 +358,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                 voice=audio_file,
                                 reply_to_message_id=reply_to_message_id
                             )
-                        logger.info("Отправлен аудиофайл inna_voice.ogg")
+                        logger.info(f"Отправлен аудиофайл {chosen_audio_file}")
                         # Логирование взаимодействия
                         user_username = update.message.from_user.username if update.message.from_user.username else ''
-                        log_interaction(user_id, user_username, text_to_process, "Отправлен аудиофайл inna_voice.ogg")
+                        log_interaction(user_id, user_username, text_to_process, f"Отправлен аудиофайл {chosen_audio_file}")
                     except TelegramError as e:
                         logger.error(f"Ошибка при отправке аудиофайла: {e}")
                         await update.message.reply_text("Произошла ошибка при отправке аудиофайла.", reply_to_message_id=reply_to_message_id)
@@ -443,6 +447,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Логируем взаимодействие
         user_username = update.message.from_user.username if update.message.from_user.username else ''
         log_interaction(user_id, user_username, text_to_process, reply)
+
 
 # Обработчик ошибок
 
