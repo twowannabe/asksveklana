@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 from telegram.error import BadRequest, TelegramError
 
 # Вероятность случайного ответа (1 из 90)
-RANDOM_RESPONSE_CHANCE = 1 / 90
+RANDOM_RESPONSE_CHANCE = 0.5
 
 # Загрузка конфигурации из файла .env
 TELEGRAM_TOKEN = config('TELEGRAM_TOKEN')
@@ -344,7 +344,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if is_random_response:
             # Реакция на случайное срабатывание
             # Выбираем случайный вариант ответа
-            random_choice = random.choice(['audio', 'text'])
+            random_choice = random.choice(['audio'])
             if random_choice == 'audio':
                 # Выбираем случайный аудиофайл из трех вариантов
                 random_audio_files = ['inna_voice_2.ogg', 'inna_voice_3.ogg', 'inna_voice_4.ogg']
