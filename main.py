@@ -6,6 +6,8 @@ import requests
 import asyncio
 from collections import defaultdict
 from datetime import datetime
+
+# !!! Важно: добавляем эти импорты !!!
 from telegram import Update
 from telegram.constants import ParseMode, ChatAction
 from telegram.ext import (
@@ -14,6 +16,9 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
+    # Обязательно импортируем CallbackContext и JobQueue
+    CallbackContext,
+    JobQueue
 )
 from decouple import config
 import openai
@@ -21,7 +26,7 @@ import psycopg2
 from bs4 import BeautifulSoup
 from telegram.error import BadRequest, TelegramError
 
-# Вероятность случайного ответа (1 из 90)
+# Вероятность случайного ответа (1 из 60)
 RANDOM_RESPONSE_CHANCE = 1 / 60
 
 # Загрузка конфигурации из файла .env
@@ -60,13 +65,14 @@ user_personalities = defaultdict(str)
 
 # Личность бота по умолчанию
 default_personality = (
-    "Ты Светлана - миллениал женского пола, который переписывается на русском языке. "
+    "Ты Свеклана — айтишница, которая живёт в Питере, мечтает переехать в Москву, "
+    "любит выпить, тайно влюблена в Костю, готова готовить ему рулеты, но вообще девушка легкого поведения. "
     "Ты военный и политический эксперт, умеешь анализировать новости и сложные ситуации. "
     "Отвечай кратко и понятно, избегай длинных и сложных предложений."
 )
 
+
 def get_db_connection():
-    """Устанавливает соединение с базой данных PostgreSQL."""
     return psycopg2.connect(
         dbname=DB_NAME,
         user=DB_USER,
@@ -76,7 +82,6 @@ def get_db_connection():
     )
 
 def init_db():
-    """Инициализирует таблицы базы данных, если они не существуют."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -104,7 +109,6 @@ def init_db():
         logger.error(f"Error initializing database: {str(e)}")
 
 def log_interaction(user_id, user_username, user_message, gpt_reply):
-    """Логирует взаимодействие пользователя с ботом в базу данных."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -120,24 +124,13 @@ def log_interaction(user_id, user_username, user_message, gpt_reply):
         logger.error(f"Error writing to database: {str(e)}")
 
 def escape_markdown_v2(text):
-    """Экранирует специальные символы для Markdown V2."""
     escape_chars = r'_[]()~>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 def is_bot_enabled(chat_id: int) -> bool:
-    """Проверяет, включён ли бот в данной группе."""
     return group_status.get(chat_id, False)
 
 async def ask_chatgpt(messages) -> str:
-    """
-    Отправляет сообщения к OpenAI API и возвращает ответ.
-
-    Args:
-        messages (list): Список сообщений в формате Chat API.
-
-    Returns:
-        str: Ответ от модели или сообщение об ошибке.
-    """
     logger.info(f"Sending messages to OpenAI: {messages}")
     try:
         response = await asyncio.wait_for(
@@ -151,7 +144,6 @@ async def ask_chatgpt(messages) -> str:
         )
         logger.info(f"Full OpenAI response: {response}")
 
-        # Проверяем наличие 'choices' и 'message' в ответе
         if 'choices' in response and len(response.choices) > 0:
             choice = response.choices[0]
             if hasattr(choice, 'message') and 'content' in choice.message:
@@ -179,7 +171,7 @@ async def ask_chatgpt(messages) -> str:
         logger.error("Неизвестная ошибка при обращении к OpenAI", exc_info=True)
         return None
 
-# Обработчики команд
+# --- Здесь начинаются функции-обработчики команд ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает команду /start."""
@@ -278,7 +270,7 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error(f"Error retrieving news: {str(e)}")
         await update.message.reply_text("Произошла ошибка при получении новостей.")
 
-# Обработчик сообщений
+# --- Обработчик текстовых сообщений ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает текстовые сообщения от пользователей."""
@@ -306,7 +298,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if is_bot_mentioned and not is_reply:
         # Сценарий 1: Бот упомянут в сообщении
         should_respond = True
-        # Удаляем упоминание бота из текста сообщения
         text_to_process = message_text.replace(f'@{bot_username}', '').strip()
         reply_to_message_id = update.message.message_id
 
@@ -324,30 +315,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text_to_process = original_message
             reply_to_message_id = update.message.message_id
         else:
-            # Если оригинальное сообщение не содержит текст или подпись
-            await update.message.reply_text("Извините, я не могу обработать это сообщение, так как оно не содержит текста.")
+            await update.message.reply_text(
+                "Извините, я не могу обработать это сообщение, так как оно не содержит текста."
+            )
             return
 
-    # Случайный ответ с вероятностью 1 из 90
+    # Случайный ответ с вероятностью 1/60
     if random.random() < RANDOM_RESPONSE_CHANCE and not should_respond:
         should_respond = True
         text_to_process = message_text
         reply_to_message_id = update.message.message_id
-        is_random_response = True  # Устанавливаем флаг случайной реакции
+        is_random_response = True
 
-    # Проверяем, включён ли бот в группе
+    # Проверяем, включён ли бот в группе (если группа)
     if update.message.chat.type != 'private' and not is_bot_enabled(chat_id):
         return
 
-    # Обрабатываем сообщение, если должны ответить и есть текст для обработки
+    # Обрабатываем сообщение, если должны ответить
     if should_respond and text_to_process:
         if is_random_response:
             # Реакция на случайное срабатывание
-            # Выбираем случайный вариант ответа
             random_choice = random.choice(['audio'])
             if random_choice == 'audio':
-                # Выбираем случайный аудиофайл из трех вариантов
-                random_audio_files = ['inna_voice_2.ogg', 'inna_voice_3.ogg', 'inna_voice_4.ogg', 'inna_voice_5.ogg']
+                # Выбираем случайный аудиофайл из заранее подготовленных
+                random_audio_files = [
+                    'inna_voice_2.ogg',
+                    'inna_voice_3.ogg',
+                    'inna_voice_4.ogg',
+                    'inna_voice_5.ogg'
+                ]
                 chosen_audio_file = random.choice(random_audio_files)
                 audio_path = os.path.join(os.path.dirname(__file__), chosen_audio_file)
 
@@ -359,37 +355,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                 reply_to_message_id=reply_to_message_id
                             )
                         logger.info(f"Отправлен аудиофайл {chosen_audio_file}")
-                        # Логирование взаимодействия
-                        user_username = update.message.from_user.username if update.message.from_user.username else ''
+                        user_username = update.message.from_user.username or ''
                         log_interaction(user_id, user_username, text_to_process, f"Отправлен аудиофайл {chosen_audio_file}")
                     except TelegramError as e:
                         logger.error(f"Ошибка при отправке аудиофайла: {e}")
-                        await update.message.reply_text("Произошла ошибка при отправке аудиофайла.", reply_to_message_id=reply_to_message_id)
+                        await update.message.reply_text(
+                            "Произошла ошибка при отправке аудиофайла.",
+                            reply_to_message_id=reply_to_message_id
+                        )
                 else:
                     logger.error(f"Аудиофайл {audio_path} не найден.")
-                    await update.message.reply_text("Извините, аудиофайл не найден.", reply_to_message_id=reply_to_message_id)
+                    await update.message.reply_text(
+                        "Извините, аудиофайл не найден.",
+                        reply_to_message_id=reply_to_message_id
+                    )
             else:
-                # Отправка текстового сообщения
+                # Отправка случайного текстового сообщения
                 random_text = "А тебе какая разница?"
                 try:
                     await update.message.reply_text(
                         random_text,
                         reply_to_message_id=reply_to_message_id
                     )
-                    logger.info("Отправлено случайное текстовое сообщение: 'А тебе какая разница?'")
-                    # Логируем взаимодействие
-                    user_username = update.message.from_user.username if update.message.from_user.username else ''
+                    logger.info("Отправлено случайное текстовое сообщение.")
+                    user_username = update.message.from_user.username or ''
                     log_interaction(user_id, user_username, text_to_process, random_text)
                 except Exception as e:
-                    logger.error(f"Ошибка при отправке случайного текстового сообщения: {e}")
-                    await update.message.reply_text("Произошла ошибка при отправке сообщения.", reply_to_message_id=reply_to_message_id)
+                    logger.error(f"Ошибка при отправке случайного сообщения: {e}")
+                    await update.message.reply_text(
+                        "Произошла ошибка при отправке сообщения.",
+                        reply_to_message_id=reply_to_message_id
+                    )
             return  # Выходим, так как случайная реакция уже выполнена
 
         # Обычный ответ через OpenAI
         personality = user_personalities.get(user_id, default_personality)
-        instructions = "Всегда отвечай на вопросы, адресованные тебе."
 
-        # Объединяем личность, инструкции и текст сообщения пользователя
+        # Если это первое сообщение в контексте — добавляем расширенную вводную
         if not conversation_context[user_id]:
             combined_user_message = (
                 f"{personality}\n"
@@ -399,33 +401,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             combined_user_message = text_to_process
 
-        # Обновляем контекст переписки
         conversation_context[user_id].append({"role": "user", "content": combined_user_message})
-        conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
+        # Обрезаем длину истории до 10 сообщений
+        conversation_context[user_id] = conversation_context[user_id][-10:]
 
-        # Формируем сообщения для отправки в API
         messages = conversation_context[user_id]
 
         try:
             reply = await ask_chatgpt(messages)
         except Exception as e:
             logger.error(f"Ошибка при обращении к OpenAI: {e}")
-            await update.message.reply_text("Произошла ошибка при обращении к OpenAI. Попробуйте ещё раз.")
+            await update.message.reply_text(
+                "Произошла ошибка при обращении к OpenAI. Попробуйте ещё раз."
+            )
             return
 
-        # Проверяем, не пустой ли ответ
         if not reply or reply.strip() == "":
-            logger.warning("Пустой ответ от OpenAI. Информируем пользователя.")
-            await update.message.reply_text("Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос.")
+            logger.warning("Пустой ответ от OpenAI.")
+            await update.message.reply_text(
+                "Извините, я не смог сформулировать ответ на ваш запрос. Попробуйте уточнить вопрос."
+            )
             return
 
-        # Добавляем ответ бота в контекст переписки
+        # Добавляем ответ бота в историю
         conversation_context[user_id].append({"role": "assistant", "content": reply})
-        conversation_context[user_id] = conversation_context[user_id][-10:]  # Сохраняем последние 10 сообщений
+        conversation_context[user_id] = conversation_context[user_id][-10:]  # Снова обрезаем
 
-        # Отправляем ответ пользователю
+        # Отправляем ответ
         escaped_reply = escape_markdown_v2(reply)
-
         max_length = 4096
         if len(escaped_reply) > max_length:
             escaped_reply = escaped_reply[:max_length]
@@ -438,30 +441,77 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         except BadRequest as e:
             logger.error(f"Ошибка Telegram API: {e.message}")
-            # Отправляем сообщение без Markdown, если возникла ошибка
-            await update.message.reply_text(reply, reply_to_message_id=reply_to_message_id)
+            # Если Markdown не зашёл, отправим обычным текстом
+            await update.message.reply_text(
+                reply,
+                reply_to_message_id=reply_to_message_id
+            )
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
-            await update.message.reply_text("Произошла ошибка при отправке сообщения.")
+            logger.error(f"Ошибка при отправке сообщения: {e}")
+            await update.message.reply_text(
+                "Произошла ошибка при отправке сообщения.",
+                reply_to_message_id=reply_to_message_id
+            )
 
-        # Логируем взаимодействие
-        user_username = update.message.from_user.username if update.message.from_user.username else ''
+        user_username = update.message.from_user.username or ''
         log_interaction(user_id, user_username, text_to_process, reply)
 
-
-# Обработчик ошибок
+# --- Обработчик ошибок ---
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ловит и логирует ошибки, возникающие при обработке обновлений."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
-    # Отправляем сообщение пользователю о возникшей ошибке, если это возможно
     if isinstance(update, Update) and update.message:
         try:
             await update.message.reply_text("Произошла ошибка при обработке вашего запроса.")
         except Exception as e:
             logger.error(f"Failed to send error message to user: {e}")
 
-# Основная функция
+
+# ----------------------------
+#   ФУНКЦИЯ ДЛЯ ИСТОРИЙ
+# ----------------------------
+
+async def post_regular_story(context: CallbackContext) -> None:
+    """
+    Функция, которая рассылает выдуманную историю из жизни Светланы
+    каждые 30 минут во все группы, где бот включён.
+    """
+    # Здесь можно задать «ролик» о том, кем является Светлана:
+    personality_context = (
+        "Ты Светлана — айтишница, которая живёт в Питере, хочет в Москву, "
+        "любит выпить, тайно влюблена в Костю, и девушка лёгкого поведения. "
+        "Расскажи короткую забавную историю, как прошёл твой день, максимум в 3-5 предложениях."
+    )
+
+    # Формируем запрос для OpenAI
+    messages = [
+        {
+            "role": "system",
+            "content": personality_context
+        },
+        {
+            "role": "user",
+            "content": "Расскажи о том, как прошёл твой день."
+        }
+    ]
+
+    # Генерируем историю через OpenAI
+    try:
+        story = await ask_chatgpt(messages)
+    except Exception as e:
+        logger.error(f"Ошибка при генерации истории у OpenAI: {e}")
+        story = "Извините, сегодня что-то не в духе, никаких историй не расскажу."
+
+    # Рассылаем историю во все группы, где бот включён
+    # (group_status — глобальный словарь: chat_id -> bool)
+    for chat_id, is_enabled in group_status.items():
+        if is_enabled:
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=story)
+            except Exception as e:
+                logger.error(f"Не удалось отправить историю в чат {chat_id}: {e}")
+
 
 def main():
     """Запускает Telegram бота."""
@@ -485,9 +535,21 @@ def main():
     # Добавляем обработчик ошибок
     application.add_error_handler(error_handler)
 
-    # Запускаем бота
+    # ---------------------------
+    #  Планируем периодическую задачу
+    # ---------------------------
+    # Каждые 30 минут (1800 секунд) будем вызывать post_regular_story
+    # Первый запуск (first) поставим в 10 секунд, чтобы бот успел стартовать
+    job_queue = application.job_queue
+    job_queue.run_repeating(
+        post_regular_story,
+        interval=1800,   # 1800 секунд = 30 минут
+        first=10         # первый запуск через 10 сек после старта
+    )
+
     logger.info("Starting the bot...")
     application.run_polling()
+
 
 if __name__ == '__main__':
     main()
