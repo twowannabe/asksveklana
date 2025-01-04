@@ -543,7 +543,7 @@ def main():
     # Каждые 1800 секунд (30 минут) вызываем post_regular_story
     job_queue.run_repeating(
         post_regular_story,
-        interval=1800,  # 30 минут
+        interval=28800,  # 30 минут
         first=10        # Первый раз через 10 секунд после старта
     )
 
