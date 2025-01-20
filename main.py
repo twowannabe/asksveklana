@@ -536,16 +536,16 @@ def main():
     # Обработчик ошибок
     application.add_error_handler(error_handler)
 
-    # ---------------------
-    # Планируем периодическую рассылку историй
-    # ---------------------
-    # job_queue = application.job_queue
-    # # Каждые 1800 секунд (30 минут) вызываем post_regular_story
-    # job_queue.run_repeating(
-    #     post_regular_story,
-    #     interval=28800,  # 30 минут
-    #     first=10        # Первый раз через 10 секунд после старта
-    # )
+    ---------------------
+    Планируем периодическую рассылку историй
+    ---------------------
+    job_queue = application.job_queue
+    # Каждые 1800 секунд (30 минут) вызываем post_regular_story
+    job_queue.run_repeating(
+        post_regular_story,
+        interval=28800,  # 30 минут
+        first=10        # Первый раз через 10 секунд после старта
+    )
 
     logger.info("Starting the bot...")
     application.run_polling()
