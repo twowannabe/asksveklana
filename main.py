@@ -547,7 +547,6 @@ def main():
     #     first=10        # Первый раз через 10 секунд после старта
     # )
 
-
     logger.info("Starting the bot...")
     application.run_polling()
 
