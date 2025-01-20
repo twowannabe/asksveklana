@@ -86,6 +86,7 @@ This project is licensed under a custom license. You may use, copy, and modify t
 ## Contributing
 Feel free to submit issues or pull requests for features, bug fixes, or other improvements. Contributions are welcome, but note that modifications should not be published or distributed.
 
+
 ## Acknowledgements
 - [OpenAI](https://openai.com) for providing the GPT models.
 - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) for the easy-to-use Telegram bot API wrapper.
