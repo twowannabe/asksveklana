@@ -134,46 +134,43 @@ def is_bot_enabled(chat_id: int) -> bool:
 
 async def ask_chatgpt(messages) -> str:
     """
-    Отправляет сообщения к OpenAI API и возвращает ответ.
-    (Для модели "o1-mini", чтобы не ломалось, используем только roles user/assistant)
+    Отправляет сообщения к OpenAI API и возвращает ответ для модели o3-mini.
     """
-    logger.info(f"Sending messages to OpenAI: {messages}")
+    logger.info(f"Отправляем сообщения в OpenAI: {messages}")
     try:
-        # Обратите внимание: "o1-mini" — это не публичная OpenAI модель,
-        # но раз у вас она раньше работала, оставим так.
         response = await asyncio.wait_for(
             openai.ChatCompletion.acreate(
-                model="o1-mini",
+                model="o3-mini",  # Новая модель
                 messages=messages,
-                max_completion_tokens=5000,
-                n=1
+                max_tokens=5000,
+                n=1,
+                temperature=0.7,  # Можно добавить параметр для разнообразия ответов
+                top_p=1
             ),
-            timeout=120  # Таймаут в 120 секунд
+            timeout=120
         )
-        logger.info(f"Full OpenAI response: {response}")
+        logger.info(f"Полный ответ OpenAI: {response}")
 
         if 'choices' in response and len(response.choices) > 0:
             choice = response.choices[0]
             if hasattr(choice, 'message') and 'content' in choice.message:
                 answer = choice.message['content'].strip()
-                logger.info(f"OpenAI response: {answer}")
+                logger.info(f"Ответ OpenAI: {answer}")
                 return answer
             else:
-                logger.warning("No 'content' in the first choice's message.")
+                logger.warning("В ответе отсутствует 'content'.")
                 return None
         else:
-            logger.warning("No choices returned in the OpenAI response.")
+            logger.warning("В ответе OpenAI отсутствуют choices.")
             return None
     except asyncio.TimeoutError:
-        logger.error("Запрос к OpenAI превысил лимит времени")
-        return "Извините, я не смог ответить на ваш запрос вовремя. Пожалуйста, попробуйте еще раз."
+        logger.error("Превышен лимит времени запроса к OpenAI")
+        return "Извините, я не успел ответить вовремя. Попробуйте еще раз."
     except openai.error.InvalidRequestError as e:
-        error_msg = f"Ошибка запроса к OpenAI API: {str(e)}"
-        logger.error(error_msg)
+        logger.error(f"Ошибка запроса к OpenAI API: {str(e)}")
         return None
     except openai.OpenAIError as e:
-        error_msg = f"Ошибка OpenAI API: {str(e)}"
-        logger.error(error_msg)
+        logger.error(f"Ошибка OpenAI API: {str(e)}")
         return None
     except Exception as e:
         logger.error("Неизвестная ошибка при обращении к OpenAI", exc_info=True)
